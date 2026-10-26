@@ -1,0 +1,37 @@
+{
+  "name": "ciclo-rutas",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "movil:sincronizar": "npm run build && cap sync",
+    "movil:iconos": "capacitor-assets generate --iconBackgroundColor #00c896 --splashBackgroundColor #0e1118",
+    "android:abrir": "cap open android",
+    "android:apk": "npm run movil:sincronizar && cd android && ./gradlew assembleDebug",
+    "ios:abrir": "cap open ios",
+    "android:copiar-apk": "node -e \"const f=require('fs');f.mkdirSync('public/descargas',{recursive:true});f.copyFileSync('android/app/build/outputs/apk/debug/app-debug.apk','public/descargas/CicloRutas.apk')\""
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/geolocation": "^8.2.4",
+    "@capacitor/ios": "^8.5.3",
+    "leaflet": "^1.9.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-leaflet": "^4.2.1"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.3",
+    "@types/leaflet": "^1.9.8",
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.1.4"
+  }
+}

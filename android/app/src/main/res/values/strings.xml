@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ciclo Rutas Seguras</string>
+    <string name="title_activity_main">Ciclo Rutas Seguras</string>
+    <string name="package_name">com.ciclorutas.seguras</string>
+    <string name="custom_url_scheme">com.ciclorutas.seguras</string>
+</resources>

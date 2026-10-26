@@ -1,0 +1,170 @@
+/* ── Design tokens ──────────────────────────────────────────── */
+:root {
+  --green:        #00c896;
+  --green-dark:   #009e78;
+  --green-dim:    rgba(0, 200, 150, 0.12);
+  --red:          #ff4757;
+  --red-dim:      rgba(255, 71, 87, 0.12);
+  --amber:        #ffb142;
+  --amber-dim:    rgba(255, 177, 66, 0.12);
+  --accent:       #5f7fff;
+  --accent-dim:   rgba(95, 127, 255, 0.12);
+
+  --bg:    #0e1118;
+  --bg2:   #161b26;
+  --bg3:   #1c2233;
+  --bg4:   #222840;
+
+  --border:       rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(255, 255, 255, 0.14);
+
+  --text:   #eef1f7;
+  --text2:  #b0b8cc;
+  --muted:  #6b7794;
+
+  --font-display: 'Syne', sans-serif;
+  --font-body:    'DM Sans', sans-serif;
+
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-xl:  20px;
+
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 20px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 40px rgba(0,0,0,0.5);
+}
+
+/* ── Reset ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ── Leaflet overrides ───────────────────────────────────────── */
+.leaflet-container { background: #12151f !important; font-family: var(--font-body) !important; }
+.leaflet-popup-content-wrapper {
+  background: var(--bg2) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+.leaflet-popup-tip         { background: var(--bg2) !important; }
+.leaflet-popup-close-button { color: var(--muted) !important; }
+.leaflet-control-zoom      { border: 1px solid var(--border) !important; border-radius: var(--radius-md) !important; overflow: hidden; }
+.leaflet-control-zoom a    { background: var(--bg2) !important; color: var(--text2) !important; border-bottom: 1px solid var(--border) !important; }
+.leaflet-control-zoom a:hover { background: var(--bg3) !important; color: var(--text) !important; }
+.leaflet-control-attribution { background: rgba(14,17,24,0.8) !important; color: var(--muted) !important; font-size: 10px !important; }
+.leaflet-control-attribution a { color: var(--accent) !important; }
+
+/* ── Utility animations ──────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulseGreen {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,200,150,0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(0,200,150,0); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.fade-in { animation: fadeIn 0.25s ease both; }
+
+/* ── Adaptación a celulares (app Android / iOS) ─────────────────
+   Los estilos de los componentes son en línea, por eso se usa !important. */
+.app-raiz {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (max-width: 760px) {
+  .app-raiz { height: 100dvh !important; }
+  .app-cuerpo { flex-direction: column !important; }
+  .app-mapa { order: 1; min-height: 0; }
+  .app-lateral {
+    order: 2;
+    width: 100% !important;
+    height: 46%;
+    border-right: none !important;
+    border-top: 1px solid var(--border);
+  }
+  .app-stats-flotante { display: none !important; }
+  .avisos-pila { left: 12px !important; right: 12px !important; bottom: 12px !important; }
+  .avisos-pila > div { white-space: normal !important; }
+  header { padding: 8px 12px !important; }
+}
+
+/* ── Móvil: mapa más compacto y menos elementos que ocupen pantalla ── */
+@media (max-width: 760px) {
+  .app-lateral { height: 58%; }                     /* más espacio para el panel, mapa más pequeño */
+  .app-mapa .leaflet-control-zoom { display: none; } /* se hace zoom con los dedos */
+  .encabezado-subtitulo, .banner-detalle { display: none !important; }
+  .app-raiz > div:nth-child(2) { padding: 4px 10px !important; font-size: 11px !important; gap: 6px !important; }
+}
+@media (max-width: 760px) {
+  header button { white-space: nowrap; font-size: 11px !important; padding: 5px 10px !important; }
+  header button span { font-size: 11px !important; }
+}
+
+/* ── Marcadores de inicio y destino (estilo Yango/Uber) ───────── */
+.pin-contenedor { display: flex; flex-direction: column; align-items: center; background: none; border: none; }
+.pin-etiqueta {
+  position: relative; margin-bottom: 9px; padding: 6px 12px;
+  background: #0e1118; color: #fff; border-radius: 10px;
+  font: 700 12px var(--font-body); white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+}
+.pin-etiqueta::after {
+  content: ''; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px;
+  background: #0e1118; transform: translateX(-50%) rotate(45deg);
+}
+.pin-punto { position: relative; width: 24px; height: 24px; }
+.pin-nucleo {
+  position: absolute; inset: 1px; background: #2f6bff; border: 3px solid #fff;
+  border-radius: 50%; box-shadow: 0 1px 6px rgba(0,0,0,0.5);
+}
+.pin-pulso {
+  position: absolute; inset: -16px; border-radius: 50%;
+  background: rgba(47,107,255,0.28); animation: pulsoUbicacion 2s ease-out infinite;
+}
+@keyframes pulsoUbicacion {
+  0%   { transform: scale(0.4); opacity: 0.9; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.pin-cuadro {
+  position: absolute; inset: 1px; display: grid; place-items: center;
+  background: #0e1118; border: 3px solid #fff; border-radius: 6px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.5);
+}
+.pin-cuadro-interno { width: 7px; height: 7px; background: #fff; border-radius: 1px; }
+.pin-etiqueta-destino { background: #ff4757; }
+.pin-etiqueta-destino::after { background: #ff4757; }
+@media (max-width: 760px) { .app-mapa .pin-etiqueta { font-size: 11px; padding: 5px 10px; } }
+@media (max-width: 760px) {
+  /* El aviso de seguridad va abajo del mapa para no tapar los marcadores */
+  .app-aviso-seguridad { top: auto !important; bottom: 10px; max-width: calc(100% - 20px) !important; padding: 6px 12px !important; gap: 8px !important; }
+  .app-aviso-seguridad > div:last-child > div:last-child { font-size: 10.5px !important; }
+}

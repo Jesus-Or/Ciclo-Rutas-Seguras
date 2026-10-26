@@ -1,0 +1,52 @@
+# Compila los instaladores de Ciclo Rutas Seguras.
+# Uso: sube el proyecto a GitHub y ejecuta "Actions > Compilar instaladores moviles > Run workflow"
+# (o haz un push a la rama main). Los resultados quedan en "Artifacts" al final de cada job.
+name: Compilar instaladores moviles
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  android:
+    name: Android (APK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Compilar APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CicloRutas-android-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+  ios:
+    name: iOS (app para simulador, sin firmar)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync ios
+      - name: Compilar para simulador
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App \
+            -configuration Debug -sdk iphonesimulator \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+          cd build/Build/Products/Debug-iphonesimulator && zip -r "$GITHUB_WORKSPACE/CicloRutas-ios-simulador.zip" App.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CicloRutas-ios-simulador
+          path: CicloRutas-ios-simulador.zip
