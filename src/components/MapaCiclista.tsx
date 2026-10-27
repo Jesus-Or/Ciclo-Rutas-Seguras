@@ -199,16 +199,16 @@ export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio,
             [puntoInicio.posicion.latitud, puntoInicio.posicion.longitud],
             [puntoDestino.posicion.latitud, puntoDestino.posicion.longitud],
           ]}
-          color={colorSeguridad(seguridadPlanificada.level)}
+          color={colorSeguridad(seguridadPlanificada.nivel)}
           weight={5}
           dashArray="10,8"
           opacity={0.9}
         >
           <Popup>
             <div style={{ fontFamily: 'var(--font-body)', minWidth: 200 }}>
-              <strong>Ruta planificada · {etiquetaSeguridad(seguridadPlanificada.level)}</strong>
+              <strong>Ruta planificada · {etiquetaSeguridad(seguridadPlanificada.nivel)}</strong>
               <br />
-              <span style={{ fontSize: 12, color: '#aaa' }}>{seguridadPlanificada.reason}</span>
+              <span style={{ fontSize: 12, color: '#aaa' }}>{seguridadPlanificada.motivo}</span>
             </div>
           </Popup>
         </Polyline>

@@ -87,6 +87,9 @@ function AppInterna() {
   const [velocidadKmh, setVelocidadKmh] = useState(15);     // velocidad promedio de la persona
   const [segundos, setSegundos] = useState(0);              // cronómetro de la ruta en curso
   const [segundosFinal, setSegundosFinal] = useState(0);    // tiempo real al terminar
+  const [avisoCerrado, setAvisoCerrado] = useState(false);  // el usuario cerró el aviso de seguridad
+  // El aviso vuelve a aparecer cuando cambia el inicio o el destino
+  useEffect(() => { setAvisoCerrado(false); }, [puntoInicio, puntoDestino]);
 
   useEffect(() => {
     if (!rutaActiva || finalizarAbierto) return;
@@ -468,11 +471,11 @@ function AppInterna() {
           />
 
           {/* Aviso de seguridad del trazado — aparece apenas hay inicio y destino */}
-          {seguridadPlanificada && (
+          {seguridadPlanificada && !avisoCerrado && (
             <div className="app-aviso-seguridad" style={{
               position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 500,
               background: 'rgba(22,27,38,0.95)',
-              border: `1px solid ${colorSeguridad(seguridadPlanificada.level)}`,
+              border: `1px solid ${colorSeguridad(seguridadPlanificada.nivel)}`,
               borderRadius: 'var(--radius-lg)',
               padding: '10px 18px',
               display: 'flex',
@@ -485,20 +488,33 @@ function AppInterna() {
             }}>
               <div style={{
                 width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-                background: colorSeguridad(seguridadPlanificada.level),
+                background: colorSeguridad(seguridadPlanificada.nivel),
                 display: 'grid', placeItems: 'center', fontSize: 17,
               }}>
-                {seguridadPlanificada.level === 'segura' ? '✅' : seguridadPlanificada.level === 'moderada' ? '⚠️' : '🚫'}
+                {seguridadPlanificada.nivel === 'segura' ? '✅' : seguridadPlanificada.nivel === 'moderada' ? '⚠️' : '🚫'}
               </div>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: colorSeguridad(seguridadPlanificada.level) }}>
-                  Ruta {etiquetaSeguridad(seguridadPlanificada.level).toLowerCase()}
+                <div style={{ fontSize: 13, fontWeight: 700, color: colorSeguridad(seguridadPlanificada.nivel) }}>
+                  Ruta {etiquetaSeguridad(seguridadPlanificada.nivel).toLowerCase()}
                   {tiempoPlanificado && <span style={{ color: 'var(--text)', whiteSpace: 'nowrap' }}> · ⏱️ {formatearDuracion(tiempoPlanificado.minutos)} · {formatearDistancia(tiempoPlanificado.distanciaKm)}</span>}
                 </div>
                 <div style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.35 }}>
-                  {seguridadPlanificada.reason}
+                  {seguridadPlanificada.motivo}
                 </div>
               </div>
+              <button
+                onClick={() => setAvisoCerrado(true)}
+                aria-label="Cerrar aviso"
+                title="Cerrar"
+                style={{
+                  flexShrink: 0, alignSelf: 'flex-start', marginLeft: 4,
+                  width: 26, height: 26, borderRadius: '50%',
+                  border: '1px solid var(--border)', background: 'transparent',
+                  color: 'var(--muted)', fontSize: 14, lineHeight: 1, cursor: 'pointer',
+                }}
+              >
+                ✕
+              </button>
             </div>
           )}
 
