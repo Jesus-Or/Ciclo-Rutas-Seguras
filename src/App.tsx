@@ -149,6 +149,9 @@ function AppInterna() {
     setSegundos(0);
     setRutaActiva(ruta);
     setRutaSeleccionada(ruta);
+    // Traza el tramo desde tu ubicación hasta el final de la ruta (con seguridad y tiempo estimado)
+    const ultimo = ruta.coordenadas[ruta.coordenadas.length - 1];
+    setPuntoDestino({ posicion: ultimo, direccion: ruta.nombre, tipo: 'destino' });
     mostrarAviso(`🚴 Iniciaste: ${ruta.nombre}`, 'exito');
   };
 
@@ -468,6 +471,7 @@ function AppInterna() {
             alClicMapa={manejarClicMapa}
             modoClic={modoClic}
             seguridadPlanificada={seguridadPlanificada}
+            rutaActiva={rutaActiva}
           />
 
           {/* Aviso de seguridad del trazado — aparece apenas hay inicio y destino */}

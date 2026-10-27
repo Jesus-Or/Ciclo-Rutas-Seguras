@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   MapContainer, TileLayer, Polyline, Marker, Popup,
   useMap, useMapEvents,
@@ -60,33 +60,68 @@ const mapaIconosMarcadores: Record<string, { fondo: string; emoji: string }> = {
 };
 
 // ── Ayudantes del mapa (hooks dentro de MapContainer) ───────────────────
-function ActualizadorMapa({ rutaSeleccionada, rutas, inicio, fin }: {
-  rutaSeleccionada: RutaCiclista | null;
+function ActualizadorMapa({ rutas, inicio, rutaActiva }: {
   rutas: RutaCiclista[];
   inicio: PuntoRuta | null;
-  fin: PuntoRuta | null;
+  rutaActiva: RutaCiclista | null;
 }) {
   const map = useMap();
+  const latitudInicio = inicio?.posicion.latitud;
+  const longitudInicio = inicio?.posicion.longitud;
+
+  // 1. El mapa se centra en tu ubicación solo cuando esta cambia.
+  //    Filtrar rutas (seguras/moderadas/peligrosas), elegir una ruta o planificar NO mueven el mapa.
   useEffect(() => {
-    if (rutaSeleccionada?.coordenadas.length) {
-      map.fitBounds(
-        new LatLngBounds(rutaSeleccionada.coordenadas.map(c => [c.latitud, c.longitud])),
-        { padding: [60, 60] }
-      );
-    } else if (inicio && fin) {
-      map.fitBounds(new LatLngBounds([
-        [inicio.posicion.latitud, inicio.posicion.longitud],
-        [fin.posicion.latitud, fin.posicion.longitud],
-      ]), { padding: [80, 80] });
-    } else if (inicio) {
-      // Solo hay punto de partida (p. ej. la ubicación del usuario): centrar ahí
-      map.setView([inicio.posicion.latitud, inicio.posicion.longitud], 15);
-    } else if (rutas.length) {
-      const todas = rutas.flatMap(r => r.coordenadas);
-      if (todas.length) map.fitBounds(new LatLngBounds(todas.map(c => [c.latitud, c.longitud])), { padding: [40, 40] });
-    }
-  }, [rutaSeleccionada, rutas, inicio, fin, map]);
+    if (latitudInicio === undefined || longitudInicio === undefined) return;
+    map.setView([latitudInicio, longitudInicio], Math.max(map.getZoom(), 14));
+  }, [latitudInicio, longitudInicio, map]);
+
+  // 2. Si todavía no hay ubicación, se muestra la red de rutas (una sola vez)
+  const ajusteInicialHecho = useRef(false);
+  useEffect(() => {
+    if (ajusteInicialHecho.current || latitudInicio !== undefined || !rutas.length) return;
+    ajusteInicialHecho.current = true;
+    const todas = rutas.flatMap(r => r.coordenadas);
+    if (todas.length) map.fitBounds(new LatLngBounds(todas.map(c => [c.latitud, c.longitud])), { padding: [40, 40] });
+  }, [rutas, latitudInicio, map]);
+
+  // 3. Al pulsar "Iniciar ruta" se muestra tu ubicación junto con la ruta elegida (una vez por ruta)
+  const idRutaActiva = rutaActiva?.id;
+  useEffect(() => {
+    if (!rutaActiva?.coordenadas.length) return;
+    const puntos: [number, number][] = rutaActiva.coordenadas.map(c => [c.latitud, c.longitud]);
+    if (latitudInicio !== undefined && longitudInicio !== undefined) puntos.push([latitudInicio, longitudInicio]);
+    map.fitBounds(new LatLngBounds(puntos), { padding: [70, 70] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idRutaActiva, map]);
+
   return null;
+}
+
+// Botón para volver a centrar el mapa en la ubicación del usuario
+function BotonMiUbicacion({ inicio }: { inicio: PuntoRuta | null }) {
+  const map = useMap();
+  if (!inicio) return null;
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        map.setView([inicio.posicion.latitud, inicio.posicion.longitud], Math.max(map.getZoom(), 15));
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      aria-label="Volver a mi ubicación"
+      title="Volver a mi ubicación"
+      style={{
+        position: 'absolute', right: 12, bottom: 24, zIndex: 1000,
+        width: 44, height: 44, borderRadius: '50%',
+        border: '1px solid var(--border)', background: 'rgba(22,27,38,0.95)',
+        color: 'var(--text)', fontSize: 20, cursor: 'pointer',
+        boxShadow: 'var(--shadow-md)',
+      }}
+    >
+      📍
+    </button>
+  );
 }
 
 function ManejadorClics({ modo, alClicMapa }: {
@@ -109,9 +144,10 @@ interface PropiedadesMapaCiclista {
   alClicMapa: (latitud: number, longitud: number) => void;
   modoClic: 'inicio' | 'destino' | null;
   seguridadPlanificada: EstimacionSeguridadRuta | null;
+  rutaActiva?: RutaCiclista | null;
 }
 
-export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio, puntoDestino, alClicMapa, modoClic, seguridadPlanificada }: PropiedadesMapaCiclista) {
+export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio, puntoDestino, alClicMapa, modoClic, seguridadPlanificada, rutaActiva = null }: PropiedadesMapaCiclista) {
   return (
     <MapContainer
       center={[4.6560, -74.0660]}
@@ -127,7 +163,8 @@ export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio,
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      <ActualizadorMapa rutaSeleccionada={rutaSeleccionada} rutas={rutas} inicio={puntoInicio} fin={puntoDestino} />
+      <ActualizadorMapa rutas={rutas} inicio={puntoInicio} rutaActiva={rutaActiva} />
+      <BotonMiUbicacion inicio={puntoInicio} />
       <ManejadorClics modo={modoClic} alClicMapa={alClicMapa} />
 
       {/* ── Rutas ─────────────────────────────────────────── */}
