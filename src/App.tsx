@@ -9,6 +9,10 @@ import { ModalReporte }       from './components/ModalReporte';
 import { DescargarApp }          from './components/DescargarApp';
 import { ModalSuscripcion }    from './components/ModalSuscripcion';
 import { ProveedorAvisos, useAviso } from './components/Aviso';
+import { PantallaLogin } from './components/PantallaLogin';
+import { supabaseConfigurado } from './supabase';
+import { useSesion, nombreDeUsuario } from './sesion';
+import type { User } from '@supabase/supabase-js';
 
 import { rutasCiclistas as rutasIniciales, marcadoresMapa } from './data';
 import {
@@ -20,16 +24,27 @@ import { estimarTiempoRecorrido, minutosPorDistancia, formatearDuracion, formate
 import { promedioCalificacion, formatearCalificacion, estimarSeguridadRuta, colorSeguridad, etiquetaSeguridad } from './utils';
 
 // ── App envuelta en proveedores ──────────────────────────────────
+// Si Supabase está configurado, primero hay que iniciar sesión.
+// Si no lo está, la app funciona sin login (modo demostración).
 export default function App() {
-  return (
-    <ProveedorAvisos>
-      <AppInterna />
-    </ProveedorAvisos>
-  );
+  const { usuario, cargando, cerrarSesion } = useSesion();
+
+  let contenido;
+  if (!supabaseConfigurado) {
+    contenido = <AppInterna usuario={null} />;
+  } else if (cargando) {
+    contenido = <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)', color: 'var(--muted)' }}>Cargando…</div>;
+  } else if (!usuario) {
+    contenido = <PantallaLogin />;
+  } else {
+    contenido = <AppInterna usuario={usuario} alCerrarSesion={cerrarSesion} />;
+  }
+
+  return <ProveedorAvisos>{contenido}</ProveedorAvisos>;
 }
 
 // ── Estructura principal ────────────────────────────────────────────────
-function AppInterna() {
+function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerrarSesion?: () => void }) {
   const { mostrarAviso } = useAviso();
 
   // ── Datos de rutas (mutables para las calificaciones) ─────────────────────
@@ -71,6 +86,11 @@ function AppInterna() {
     diasPruebaRestantes: 15,
     esPremium: false,
   });
+
+  // El nombre de la cuenta sale del usuario que inició sesión
+  useEffect(() => {
+    if (usuario) setCuenta(c => ({ ...c, nombre: nombreDeUsuario(usuario) }));
+  }, [usuario]);
 
   // ── Valores derivados ───────────────────────────────────────────────
   const rutasFiltradas = useMemo(() =>
@@ -357,6 +377,19 @@ function AppInterna() {
             </div>
             <span style={{ fontSize: 13, fontWeight: 600 }}>{cuenta.nombre}</span>
           </button>
+          {alCerrarSesion && (
+            <button
+              onClick={alCerrarSesion}
+              title="Cerrar sesión"
+              style={{
+                background: 'none', border: '1px solid var(--border)', borderRadius: 20,
+                padding: '6px 12px', fontSize: 12, color: 'var(--muted)', cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+              }}
+            >
+              Salir
+            </button>
+          )}
         </div>
       </header>
 

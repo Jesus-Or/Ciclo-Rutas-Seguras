@@ -13,3 +13,6 @@ ios/App/build
 ios/App/Pods
 ios/DerivedData
 .DS_Store
+
+.env
+.env.local
