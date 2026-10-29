@@ -258,7 +258,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
 
       {/* ── Banner de publicidad (solo en prueba) ───────────────────────────── */}
       {!cuenta.esPremium && (
-        <div style={{
+        <div className="banner-publicidad" style={{
           background: '#0e1118',
           borderBottom: '1px solid var(--border)',
           padding: '6px 20px',
@@ -280,7 +280,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
           }}>
             Publicidad
           </span>
-          🛒 Equípate para tu próxima ruta —{' '}
+          <span className="publicidad-texto">🛒 Equípate para tu próxima ruta —</span>{' '}
           <a href="#" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
             Bicicletas Bogotá · Ver ofertas →
           </a>
@@ -304,7 +304,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
       )}
 
       {/* ── Encabezado ───────────────────────────────────────────── */}
-      <header style={{
+      <header className="encabezado" style={{
         background: 'var(--bg2)',
         borderBottom: '1px solid var(--border)',
         padding: '12px 24px',
@@ -313,7 +313,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
         justifyContent: 'space-between',
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="encabezado-marca" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             background: 'var(--green)',
             color: '#000',
@@ -322,9 +322,10 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
             display: 'grid',
             placeItems: 'center',
             fontSize: 18,
+            flexShrink: 0,
           }}>🚴</div>
-          <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 800, letterSpacing: '-0.4px' }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="encabezado-titulo" style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 800, letterSpacing: '-0.4px' }}>
               Ciclo Rutas Seguras
             </div>
             <div className="encabezado-subtitulo" style={{ fontSize: 11, color: 'var(--muted)' }}>
@@ -333,7 +334,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="encabezado-acciones" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <DescargarApp />
           {incidentes.length > 0 && (
             <span style={{
@@ -349,6 +350,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
             </span>
           )}
           <button
+            className="encabezado-cuenta"
             onClick={() => setSuscripcionAbierta(true)}
             style={{
               background: 'var(--bg3)',
@@ -364,7 +366,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
             }}
           >
             <div style={{
-              width: 26, height: 26,
+              width: 26, height: 26, flexShrink: 0,
               background: cuenta.esPremium ? 'var(--green)' : 'var(--accent)',
               borderRadius: '50%',
               display: 'grid',
@@ -375,19 +377,21 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
             }}>
               {cuenta.esPremium ? '★' : 'U'}
             </div>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>{cuenta.nombre}</span>
+            <span className="encabezado-nombre" style={{ fontSize: 13, fontWeight: 600 }}>{cuenta.nombre}</span>
           </button>
           {alCerrarSesion && (
             <button
+              className="encabezado-salir"
               onClick={alCerrarSesion}
               title="Cerrar sesión"
+              aria-label="Cerrar sesión"
               style={{
-                background: 'none', border: '1px solid var(--border)', borderRadius: 20,
-                padding: '6px 12px', fontSize: 12, color: 'var(--muted)', cursor: 'pointer',
+                background: 'var(--red-dim)', border: '1px solid rgba(255,71,87,0.35)', borderRadius: 20,
+                padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--red)', cursor: 'pointer',
                 fontFamily: 'var(--font-body)',
               }}
             >
-              Salir
+              ⏻ Salir
             </button>
           )}
         </div>
@@ -398,7 +402,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
 
         {/* ── Barra lateral ──────────────────────────────────────── */}
         <aside className="app-lateral" style={{
-          width: 390,
+          width: 'clamp(300px, 28vw, 420px)',
           background: 'var(--bg2)',
           borderRight: '1px solid var(--border)',
           display: 'flex',
@@ -704,7 +708,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
 function BannerPrueba({ cuenta, alSuscribirse }: { cuenta: CuentaUsuario; alSuscribirse: () => void }) {
   const esPremium = cuenta.esPremium;
   return (
-    <div style={{
+    <div className="banner-prueba" style={{
       background: esPremium
         ? 'linear-gradient(90deg, #001a0f, #002a17, #001a0f)'
         : 'linear-gradient(90deg, #1a1200, #2a1e00, #1a1200)',
@@ -719,7 +723,7 @@ function BannerPrueba({ cuenta, alSuscribirse }: { cuenta: CuentaUsuario; alSusc
       flexShrink: 0,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontWeight: 700 }}>{esPremium ? '⭐ Ciclo Rutas Pro' : '🚴 Ciclo Rutas'}</span>
+        <span className="banner-marca" style={{ fontWeight: 700 }}>{esPremium ? '⭐ Ciclo Rutas Pro' : '🚴 Ciclo Rutas'}</span>
         <span style={{
           background: esPremium ? 'rgba(0,200,150,0.15)' : 'rgba(255,177,66,0.15)',
           border: `1px solid ${esPremium ? 'rgba(0,200,150,0.4)' : 'rgba(255,177,66,0.4)'}`,

@@ -12,6 +12,8 @@ jobs:
   android:
     name: Android (APK)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # necesario para publicar el APK en Releases
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,6 +34,13 @@ jobs:
         with:
           name: CicloRutas-android-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Publicar APK en Releases (enlace fijo para el boton Descargar app)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk CicloRutas.apk
+          gh release delete android-latest --cleanup-tag --yes || true
+          gh release create android-latest CicloRutas.apk --title "Android - ultima version" --notes "APK de prueba. Al instalarlo, permite instalar apps de origenes desconocidos."
 
   ios:
     name: iOS (app para simulador, sin firmar)

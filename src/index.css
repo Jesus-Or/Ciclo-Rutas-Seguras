@@ -129,6 +129,46 @@ body {
   header button span { font-size: 11px !important; }
 }
 
+/* ── Responsive: cualquier pantalla ─────────────────────────────── */
+/* Zonas seguras (muescas y barras del celular) */
+.app-raiz { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); box-sizing: border-box; }
+
+/* Encabezado: en pantallas angostas pasa a dos filas y el botón Salir siempre se ve */
+.encabezado { flex-wrap: wrap; gap: 8px; }
+.encabezado-marca { min-width: 0; flex: 1 1 auto; }
+.encabezado-titulo { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.encabezado-acciones { flex-wrap: wrap; justify-content: flex-end; }
+.encabezado-nombre { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.encabezado-salir { flex-shrink: 0; }
+
+@media (max-width: 760px) {
+  .encabezado { padding: 8px 12px !important; }
+  .encabezado-marca { flex: 1 1 100%; }
+  .encabezado-titulo { font-size: 15px !important; }
+  .encabezado-acciones { width: 100%; flex-wrap: nowrap; gap: 8px !important; justify-content: space-between; }
+  .encabezado-acciones > * { flex-shrink: 0; }
+  .encabezado-cuenta { flex: 1 1 auto !important; flex-shrink: 1 !important; min-width: 0; justify-content: flex-start; }
+  .encabezado-nombre { max-width: 100%; }
+  /* Franjas de arriba más delgadas para dar espacio al mapa */
+  .banner-prueba { padding: 4px 10px !important; }
+  .banner-marca, .publicidad-texto { display: none !important; }
+  .banner-publicidad { padding: 3px 10px !important; }
+  /* El botón "mi ubicación" va arriba a la derecha (abajo está el aviso de seguridad) */
+  .boton-mi-ubicacion { top: 12px !important; bottom: auto !important; width: 40px !important; height: 40px !important; }
+}
+
+/* Celulares muy angostos */
+@media (max-width: 380px) {
+  .encabezado-titulo { font-size: 14px !important; }
+  .encabezado-salir { padding: 5px 8px !important; }
+}
+
+/* Pantallas bajitas (celular acostado): se quitan las franjas para ganar espacio */
+@media (max-height: 500px) {
+  .banner-prueba, .banner-publicidad, .encabezado-subtitulo { display: none !important; }
+  .encabezado { padding: 6px 12px !important; }
+}
+
 /* ── Marcadores de inicio y destino (estilo Yango/Uber) ───────── */
 .pin-contenedor { display: flex; flex-direction: column; align-items: center; background: none; border: none; }
 .pin-etiqueta {

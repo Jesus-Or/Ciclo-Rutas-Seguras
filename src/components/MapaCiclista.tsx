@@ -104,6 +104,7 @@ function BotonMiUbicacion({ inicio }: { inicio: PuntoRuta | null }) {
   if (!inicio) return null;
   return (
     <button
+      className="boton-mi-ubicacion"
       onClick={(e) => {
         e.stopPropagation();
         map.setView([inicio.posicion.latitud, inicio.posicion.longitud], Math.max(map.getZoom(), 15));
