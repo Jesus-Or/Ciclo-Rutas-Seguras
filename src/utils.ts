@@ -86,7 +86,7 @@ const LIMITE_MODERADA = 1.35;          // por debajo de esto => moderada; desde 
 
 const RIESGO_POR_NIVEL: Record<NivelSeguridad, number> = { segura: 0, moderada: 1, peligrosa: 2 };
 
-function aRadianes(deg: number): number {
+export function aRadianes(deg: number): number {
   return (deg * Math.PI) / 180;
 }
 

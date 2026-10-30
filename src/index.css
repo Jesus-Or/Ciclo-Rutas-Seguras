@@ -208,3 +208,16 @@ body {
   .app-aviso-seguridad { top: auto !important; bottom: 10px; max-width: calc(100% - 20px) !important; padding: 6px 12px !important; gap: 8px !important; }
   .app-aviso-seguridad > div:last-child > div:last-child { font-size: 10.5px !important; }
 }
+
+/* ── Panel lateral plegable (celular) ───────────────────────────── */
+.lateral-tirador { display: none; }
+@media (max-width: 760px) {
+  .lateral-tirador {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    width: 100%; padding: 9px; flex-shrink: 0;
+    background: var(--bg3); border: none; border-bottom: 1px solid var(--border);
+    color: var(--text2); font: 600 12px var(--font-body); cursor: pointer;
+  }
+  .app-lateral.app-lateral-oculto { height: auto !important; }
+  .app-lateral.app-lateral-oculto > :not(.lateral-tirador) { display: none !important; }
+}

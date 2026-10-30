@@ -60,20 +60,37 @@ const mapaIconosMarcadores: Record<string, { fondo: string; emoji: string }> = {
 };
 
 // ── Ayudantes del mapa (hooks dentro de MapContainer) ───────────────────
-function ActualizadorMapa({ rutas, inicio, rutaActiva }: {
+function ActualizadorMapa({ rutas, inicio, rutaActiva, seguirUsuario }: {
   rutas: RutaCiclista[];
   inicio: PuntoRuta | null;
   rutaActiva: RutaCiclista | null;
+  seguirUsuario: boolean;
 }) {
   const map = useMap();
   const latitudInicio = inicio?.posicion.latitud;
   const longitudInicio = inicio?.posicion.longitud;
 
-  // 1. El mapa se centra en tu ubicación solo cuando esta cambia.
-  //    Filtrar rutas (seguras/moderadas/peligrosas), elegir una ruta o planificar NO mueven el mapa.
+  // El mapa se redibuja bien cuando cambia de tamaño (por ejemplo, al ocultar el panel en celular)
+  useEffect(() => {
+    const contenedor = map.getContainer();
+    const observador = new ResizeObserver(() => map.invalidateSize());
+    observador.observe(contenedor);
+    return () => observador.disconnect();
+  }, [map]);
+
+  // 1. Con la primera ubicación el mapa se centra en ti. Después NO se mueve solo
+  //    (filtrar rutas o planificar no lo mueven), salvo durante una ruta en curso: ahí te sigue.
+  const centradoInicial = useRef(false);
+  const seguirRef = useRef(seguirUsuario);
+  seguirRef.current = seguirUsuario;
   useEffect(() => {
     if (latitudInicio === undefined || longitudInicio === undefined) return;
-    map.setView([latitudInicio, longitudInicio], Math.max(map.getZoom(), 14));
+    if (!centradoInicial.current) {
+      centradoInicial.current = true;
+      map.setView([latitudInicio, longitudInicio], Math.max(map.getZoom(), 14));
+    } else if (seguirRef.current) {
+      map.panTo([latitudInicio, longitudInicio], { animate: true });
+    }
   }, [latitudInicio, longitudInicio, map]);
 
   // 2. Si todavía no hay ubicación, se muestra la red de rutas (una sola vez)
@@ -146,9 +163,10 @@ interface PropiedadesMapaCiclista {
   modoClic: 'inicio' | 'destino' | null;
   seguridadPlanificada: EstimacionSeguridadRuta | null;
   rutaActiva?: RutaCiclista | null;
+  seguirUsuario?: boolean;
 }
 
-export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio, puntoDestino, alClicMapa, modoClic, seguridadPlanificada, rutaActiva = null }: PropiedadesMapaCiclista) {
+export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio, puntoDestino, alClicMapa, modoClic, seguridadPlanificada, rutaActiva = null, seguirUsuario = false }: PropiedadesMapaCiclista) {
   return (
     <MapContainer
       center={[4.6560, -74.0660]}
@@ -164,7 +182,7 @@ export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio,
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      <ActualizadorMapa rutas={rutas} inicio={puntoInicio} rutaActiva={rutaActiva} />
+      <ActualizadorMapa rutas={rutas} inicio={puntoInicio} rutaActiva={rutaActiva} seguirUsuario={seguirUsuario} />
       <BotonMiUbicacion inicio={puntoInicio} />
       <ManejadorClics modo={modoClic} alClicMapa={alClicMapa} />
 

@@ -17,10 +17,10 @@ import type { User } from '@supabase/supabase-js';
 import { rutasCiclistas as rutasIniciales, marcadoresMapa } from './data';
 import {
   RutaCiclista, NivelSeguridad, PuntoRuta,
-  ReporteIncidente, TipoPlan, CuentaUsuario, PestanaLateral, ModoClic,
+  ReporteIncidente, TipoPlan, CuentaUsuario, PestanaLateral, ModoClic, Coordenada,
 } from './types';
-import { obtenerUbicacionActual } from './ubicacion';
-import { estimarTiempoRecorrido, minutosPorDistancia, formatearDuracion, formatearDistancia, formatearCronometro } from './utils';
+import { obtenerUbicacionActual, observarUbicacion } from './ubicacion';
+import { estimarTiempoRecorrido, minutosPorDistancia, formatearDuracion, formatearDistancia, formatearCronometro, distanciaHaversineKm } from './utils';
 import { promedioCalificacion, formatearCalificacion, estimarSeguridadRuta, colorSeguridad, etiquetaSeguridad } from './utils';
 
 // ── App envuelta en proveedores ──────────────────────────────────
@@ -108,8 +108,17 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
   const [segundos, setSegundos] = useState(0);              // cronómetro de la ruta en curso
   const [segundosFinal, setSegundosFinal] = useState(0);    // tiempo real al terminar
   const [avisoCerrado, setAvisoCerrado] = useState(false);  // el usuario cerró el aviso de seguridad
-  // El aviso vuelve a aparecer cuando cambia el inicio o el destino
-  useEffect(() => { setAvisoCerrado(false); }, [puntoInicio, puntoDestino]);
+  // El aviso vuelve a aparecer cuando cambia el destino (no cada vez que te mueves)
+  // Panel lateral (en celular se puede ocultar para ver el mapa completo)
+  const [panelOculto, setPanelOculto] = useState(false);
+  const huboDestino = useRef(false);
+  useEffect(() => {
+    // Al elegir un destino nuevo el panel se oculta solo; se vuelve a mostrar con el botón de arriba del panel
+    if (puntoDestino && !huboDestino.current) setPanelOculto(true);
+    huboDestino.current = Boolean(puntoDestino);
+  }, [puntoDestino]);
+  // El aviso vuelve a aparecer cuando cambia el destino
+  useEffect(() => { setAvisoCerrado(false); }, [puntoDestino]);
 
   useEffect(() => {
     if (!rutaActiva || finalizarAbierto) return;
@@ -122,10 +131,13 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
     return estimarTiempoRecorrido(puntoInicio.posicion, puntoDestino.posicion, velocidadKmh);
   }, [puntoInicio, puntoDestino, velocidadKmh]);
 
+  const ultimaPosicion = useRef<Coordenada | null>(null);
+
   // Toma la ubicación del dispositivo como punto de partida (sin que el usuario la escriba)
   const usarMiUbicacion = async (silencioso = false) => {
     try {
       const posicion = await obtenerUbicacionActual();
+      ultimaPosicion.current = posicion;
       setPuntoInicio({ posicion, direccion: 'Mi ubicación actual', tipo: 'inicio' });
       if (!silencioso) mostrarAviso('📍 Usando tu ubicación como inicio', 'exito');
     } catch {
@@ -133,12 +145,30 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
     }
   };
 
-  // Al abrir la app: ubicación inicial automática (una sola vez)
-  const ubicacionSolicitada = useRef(false);
+  // Seguimiento de tu ubicación mientras te mueves (por ejemplo, manejando).
+  // Si marcaste el inicio a mano en el mapa, no se sobrescribe; "Actualizar mi ubicación" vuelve al GPS.
+  const falloGps = useRef(false);
   useEffect(() => {
-    if (ubicacionSolicitada.current) return;
-    ubicacionSolicitada.current = true;
-    usarMiUbicacion(true);
+    let cancelado = false;
+    let detener: (() => void) | undefined;
+    const avisarFalloUnaVez = () => {
+      if (falloGps.current) return;
+      falloGps.current = true;
+      mostrarAviso('No pudimos obtener tu ubicación. Actívala o márcala en el mapa.', 'info');
+    };
+    observarUbicacion((coordenada) => {
+      const anterior = ultimaPosicion.current;
+      // Se ignoran movimientos menores a 8 m (ruido normal del GPS)
+      if (anterior && distanciaHaversineKm(anterior, coordenada) < 0.008) return;
+      ultimaPosicion.current = coordenada;
+      setPuntoInicio(actual =>
+        actual && actual.direccion !== 'Mi ubicación actual'
+          ? actual
+          : { posicion: coordenada, direccion: 'Mi ubicación actual', tipo: 'inicio' });
+    }, avisarFalloUnaVez)
+      .then(funcionDetener => { if (cancelado) funcionDetener(); else detener = funcionDetener; })
+      .catch(avisarFalloUnaVez);
+    return () => { cancelado = true; detener?.(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -154,6 +184,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
 
   const manejarLimpiar = () => {
     setPuntoDestino(null); setModoClic(null); // el inicio siempre es la ubicación del usuario
+    setPanelOculto(false);                    // se vuelve a mostrar el panel para elegir otro destino
   };
 
   const manejarAlternarGuardado = (id: string) => {
@@ -401,7 +432,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
       <div className="app-cuerpo" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
         {/* ── Barra lateral ──────────────────────────────────────── */}
-        <aside className="app-lateral" style={{
+        <aside className={`app-lateral${panelOculto ? ' app-lateral-oculto' : ''}`} style={{
           width: 'clamp(300px, 28vw, 420px)',
           background: 'var(--bg2)',
           borderRight: '1px solid var(--border)',
@@ -410,6 +441,11 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
           overflow: 'hidden',
           flexShrink: 0,
         }}>
+          {/* Botón para ocultar o mostrar el panel (solo en celular) */}
+          <button className="lateral-tirador" onClick={() => setPanelOculto(oculto => !oculto)}>
+            {panelOculto ? '▲ Mostrar panel' : '▼ Ocultar panel'}
+          </button>
+
           {/* Barra de pestañas */}
           <div style={{
             display: 'flex',
@@ -509,6 +545,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
             modoClic={modoClic}
             seguridadPlanificada={seguridadPlanificada}
             rutaActiva={rutaActiva}
+            seguirUsuario={Boolean(rutaActiva)}
           />
 
           {/* Aviso de seguridad del trazado — aparece apenas hay inicio y destino */}
