@@ -1,5 +1,4 @@
 import { useState, FormEvent } from 'react';
-import { Capacitor } from '@capacitor/core';
 import { supabase } from '../supabase';
 
 type Modo = 'ingresar' | 'registro' | 'recuperar';
@@ -31,8 +30,8 @@ export function PantallaLogin() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
-  // El ingreso con Google funciona en la web; en la app móvil se usa correo y contraseña
-  const permitirGoogle = !Capacitor.isNativePlatform();
+  // SE MODIFICA AQUÍ: Permitimos que el botón se muestre tanto en la versión web como en el APK móvil.
+  const permitirGoogle = true;
 
   const cambiarModo = (nuevo: Modo) => { setModo(nuevo); setError(''); setInfo(''); };
 
@@ -136,8 +135,14 @@ export function PantallaLogin() {
             <button type="button" onClick={ingresarConGoogle} style={{
               width: '100%', background: 'var(--bg3)', color: 'var(--text)', border: '1px solid var(--border-hover)',
               borderRadius: 'var(--radius-md)', padding: '11px 16px', fontSize: 14, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'var(--font-body)',
+              cursor: 'pointer', fontFamily: 'var(--font-body)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
             }}>
+              <svg width="18" height="18" viewBox="0 0 18 18" style={{ display: 'block' }}>
+                <path d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.47h4.84c-.21 1.12-.84 2.07-1.79 2.7v2.24h2.9c1.69-1.55 2.69-3.85 2.69-6.57z" fill="#4285F4"/>
+                <path d="M9 18c2.43 0 4.47-.8 5.96-2.23l-2.9-2.24c-.8.54-1.84.87-3.06.87-2.35 0-4.34-1.58-5.05-3.71H.92v2.32C2.4 15.86 5.43 18 9 18z" fill="#34A853"/>
+                <path d="M3.95 10.69c-.18-.54-.28-1.12-.28-1.69s.1-1.15.28-1.69V5.01H.92A8.99 8.99 0 0 0 0 9c0 1.46.35 2.85.92 4.09l3.03-2.4z" fill="#FBBC05"/>
+                <path d="M9 3.58c1.32 0 2.5.45 3.44 1.35L15 2.4A8.99 8.99 0 0 0 9 0C5.43 0 2.4 2.14.92 5.01l3.03 2.32C4.66 5.16 6.65 3.58 9 3.58z" fill="#EA4335"/>
+              </svg>
               Continuar con Google
             </button>
           </>
