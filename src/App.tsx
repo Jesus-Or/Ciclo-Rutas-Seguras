@@ -10,6 +10,7 @@ import { DescargarApp }          from './components/DescargarApp';
 import { ModalSuscripcion }    from './components/ModalSuscripcion';
 import { ProveedorAvisos, useAviso } from './components/Aviso';
 import { PantallaLogin } from './components/PantallaLogin';
+import { NuevaContrasena } from './components/NuevaContrasena';
 import { supabaseConfigurado } from './supabase';
 import { useSesion, nombreDeUsuario } from './sesion';
 import type { User } from '@supabase/supabase-js';
@@ -27,13 +28,16 @@ import { promedioCalificacion, formatearCalificacion, estimarSeguridadRuta, colo
 // Si Supabase está configurado, primero hay que iniciar sesión.
 // Si no lo está, la app funciona sin login (modo demostración).
 export default function App() {
-  const { usuario, cargando, cerrarSesion } = useSesion();
+  const { usuario, cargando, recuperando, terminarRecuperacion, cerrarSesion } = useSesion();
 
   let contenido;
   if (!supabaseConfigurado) {
     contenido = <AppInterna usuario={null} />;
   } else if (cargando) {
     contenido = <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)', color: 'var(--muted)' }}>Cargando…</div>;
+  } else if (recuperando) {
+    // La recuperación va ANTES que el login y que el mapa
+    contenido = <NuevaContrasena alTerminar={terminarRecuperacion} />;
   } else if (!usuario) {
     contenido = <PantallaLogin />;
   } else {
