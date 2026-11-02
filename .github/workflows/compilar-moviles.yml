@@ -22,8 +22,7 @@ jobs:
         with: { distribution: temurin, java-version: 21 }
       - name: Preparar SDK de Android (ya viene instalado en el runner)
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
       - run: npm ci
       - run: npm run build
       - run: npx cap sync android
