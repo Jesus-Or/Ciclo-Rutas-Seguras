@@ -4,8 +4,9 @@ import {
   useMap, useMapEvents,
 } from 'react-leaflet';
 import { LatLngBounds, LeafletMouseEvent } from 'leaflet';
-import { RutaCiclista, MarcadorMapa, PuntoRuta } from '../types';
+import { RutaCiclista, MarcadorMapa, PuntoRuta, Coordenada, RutaCalculada } from '../types';
 import { colorSeguridad, etiquetaSeguridad, EstimacionSeguridadRuta } from '../utils';
+import { formatearMetros } from '../enrutamiento';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -59,11 +60,14 @@ const mapaIconosMarcadores: Record<string, { fondo: string; emoji: string }> = {
   incidente:{ fondo: '#ff8c00', emoji: '🚨' },
 };
 
+const aLatLng = (p: Coordenada): [number, number] => [p.latitud, p.longitud];
+
 // ── Ayudantes del mapa (hooks dentro de MapContainer) ───────────────────
-function ActualizadorMapa({ rutas, inicio, rutaActiva, seguirUsuario }: {
+function ActualizadorMapa({ rutas, inicio, rutaActiva, rutaPlanificada, seguirUsuario }: {
   rutas: RutaCiclista[];
   inicio: PuntoRuta | null;
   rutaActiva: RutaCiclista | null;
+  rutaPlanificada: RutaCalculada | null;
   seguirUsuario: boolean;
 }) {
   const map = useMap();
@@ -78,8 +82,8 @@ function ActualizadorMapa({ rutas, inicio, rutaActiva, seguirUsuario }: {
     return () => observador.disconnect();
   }, [map]);
 
-  // 1. Con la primera ubicación el mapa se centra en ti. Después NO se mueve solo
-  //    (filtrar rutas o planificar no lo mueven), salvo durante una ruta en curso: ahí te sigue.
+  // 1. Con la primera ubicación el mapa se centra en ti. Después NO se mueve solo,
+  //    salvo durante una ruta en curso: ahí te sigue.
   const centradoInicial = useRef(false);
   const seguirRef = useRef(seguirUsuario);
   seguirRef.current = seguirUsuario;
@@ -99,18 +103,24 @@ function ActualizadorMapa({ rutas, inicio, rutaActiva, seguirUsuario }: {
     if (ajusteInicialHecho.current || latitudInicio !== undefined || !rutas.length) return;
     ajusteInicialHecho.current = true;
     const todas = rutas.flatMap(r => r.coordenadas);
-    if (todas.length) map.fitBounds(new LatLngBounds(todas.map(c => [c.latitud, c.longitud])), { padding: [40, 40] });
+    if (todas.length) map.fitBounds(new LatLngBounds(todas.map(aLatLng)), { padding: [40, 40] });
   }, [rutas, latitudInicio, map]);
 
   // 3. Al pulsar "Iniciar ruta" se muestra tu ubicación junto con la ruta elegida (una vez por ruta)
   const idRutaActiva = rutaActiva?.id;
   useEffect(() => {
     if (!rutaActiva?.coordenadas.length) return;
-    const puntos: [number, number][] = rutaActiva.coordenadas.map(c => [c.latitud, c.longitud]);
+    const puntos: [number, number][] = rutaActiva.coordenadas.map(aLatLng);
     if (latitudInicio !== undefined && longitudInicio !== undefined) puntos.push([latitudInicio, longitudInicio]);
     map.fitBounds(new LatLngBounds(puntos), { padding: [70, 70] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idRutaActiva, map]);
+
+  // 4. Cuando se calcula una ruta planificada, se encuadra completa (no mientras te sigue)
+  useEffect(() => {
+    if (!rutaPlanificada?.coordenadas.length || seguirRef.current) return;
+    map.fitBounds(new LatLngBounds(rutaPlanificada.coordenadas.map(aLatLng)), { padding: [70, 70] });
+  }, [rutaPlanificada, map]);
 
   return null;
 }
@@ -164,9 +174,19 @@ interface PropiedadesMapaCiclista {
   seguridadPlanificada: EstimacionSeguridadRuta | null;
   rutaActiva?: RutaCiclista | null;
   seguirUsuario?: boolean;
+  /** Ruta real por calles entre inicio y destino (calcularRutaReal) */
+  rutaPlanificada?: RutaCalculada | null;
+  /** Rutas predefinidas ajustadas a las calles (useRutasSobreVias) */
+  coordenadasAjustadas?: Record<string, Coordenada[]>;
 }
 
-export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio, puntoDestino, alClicMapa, modoClic, seguridadPlanificada, rutaActiva = null, seguirUsuario = false }: PropiedadesMapaCiclista) {
+export function MapaCiclista({
+  rutas, rutaSeleccionada, marcadores, puntoInicio, puntoDestino, alClicMapa, modoClic,
+  seguridadPlanificada, rutaActiva = null, seguirUsuario = false,
+  rutaPlanificada = null, coordenadasAjustadas = {},
+}: PropiedadesMapaCiclista) {
+  const colorPlanificada = seguridadPlanificada ? colorSeguridad(seguridadPlanificada.nivel) : '#5f7fff';
+
   return (
     <MapContainer
       center={[4.6560, -74.0660]}
@@ -182,17 +202,24 @@ export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio,
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      <ActualizadorMapa rutas={rutas} inicio={puntoInicio} rutaActiva={rutaActiva} seguirUsuario={seguirUsuario} />
+      <ActualizadorMapa
+        rutas={rutas}
+        inicio={puntoInicio}
+        rutaActiva={rutaActiva}
+        rutaPlanificada={rutaPlanificada}
+        seguirUsuario={seguirUsuario}
+      />
       <BotonMiUbicacion inicio={puntoInicio} />
       <ManejadorClics modo={modoClic} alClicMapa={alClicMapa} />
 
-      {/* ── Rutas ─────────────────────────────────────────── */}
+      {/* ── Rutas predefinidas (ajustadas a las calles cuando ya están calculadas) ── */}
       {rutas.map(ruta => {
         const estaActivo = rutaSeleccionada?.id === ruta.id;
+        const coordenadas = coordenadasAjustadas[ruta.id] ?? ruta.coordenadas;
         return (
           <Polyline
             key={ruta.id}
-            positions={ruta.coordenadas.map(c => [c.latitud, c.longitud])}
+            positions={coordenadas.map(aLatLng)}
             color={colorSeguridad(ruta.nivelSeguridad)}
             weight={estaActivo ? 7 : 4}
             opacity={rutaSeleccionada ? (estaActivo ? 1 : 0.2) : 0.72}
@@ -212,9 +239,9 @@ export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio,
 
       {/* ── POI marcadores ────────────────────────────────────── */}
       {marcadores.map(m => {
-        const configuracion = mapaIconosMarcadores[m.tipo] ?? mapaIconosMarcadores.poi;
+        const configuracion = mapaIconosMarcadores[m.tipo] ?? mapaIconosMarcadores.interes;
         return (
-          <Marker key={m.id} position={[m.posicion.latitud, m.posicion.longitud]} icon={iconoCirculo(configuracion.fondo, configuracion.emoji)}>
+          <Marker key={m.id} position={aLatLng(m.posicion)} icon={iconoCirculo(configuracion.fondo, configuracion.emoji)}>
             <Popup><strong>{m.titulo}</strong></Popup>
           </Marker>
         );
@@ -222,11 +249,7 @@ export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio,
 
       {/* ── Marcador de inicio ───────────────────────────────────── */}
       {puntoInicio && (
-        <Marker
-          position={[puntoInicio.posicion.latitud, puntoInicio.posicion.longitud]}
-          icon={iconoInicio()}
-          zIndexOffset={1000}
-        >
+        <Marker position={aLatLng(puntoInicio.posicion)} icon={iconoInicio()} zIndexOffset={1000}>
           <Popup>
             <strong>📍 Inicio</strong>
             {puntoInicio.direccion && <><br />{puntoInicio.direccion}</>}
@@ -236,11 +259,7 @@ export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio,
 
       {/* ── Marcador de destino ─────────────────────────────────────── */}
       {puntoDestino && (
-        <Marker
-          position={[puntoDestino.posicion.latitud, puntoDestino.posicion.longitud]}
-          icon={iconoDestino()}
-          zIndexOffset={1000}
-        >
+        <Marker position={aLatLng(puntoDestino.posicion)} icon={iconoDestino()} zIndexOffset={1000}>
           <Popup>
             <strong>🎯 Destino</strong>
             {puntoDestino.direccion && <><br />{puntoDestino.direccion}</>}
@@ -248,26 +267,40 @@ export function MapaCiclista({ rutas, rutaSeleccionada, marcadores, puntoInicio,
         </Marker>
       )}
 
-      {/* ── Línea de ruta (coloreada según el nivel de seguridad estimado) ── */}
-      {puntoInicio && puntoDestino && seguridadPlanificada && (
-        <Polyline
-          positions={[
-            [puntoInicio.posicion.latitud, puntoInicio.posicion.longitud],
-            [puntoDestino.posicion.latitud, puntoDestino.posicion.longitud],
-          ]}
-          color={colorSeguridad(seguridadPlanificada.nivel)}
-          weight={5}
-          dashArray="10,8"
-          opacity={0.9}
-        >
-          <Popup>
-            <div style={{ fontFamily: 'var(--font-body)', minWidth: 200 }}>
-              <strong>Ruta planificada · {etiquetaSeguridad(seguridadPlanificada.nivel)}</strong>
-              <br />
-              <span style={{ fontSize: 12, color: '#aaa' }}>{seguridadPlanificada.motivo}</span>
-            </div>
-          </Popup>
-        </Polyline>
+      {/* ── Ruta real por las calles (borde blanco + línea de color) ── */}
+      {rutaPlanificada && rutaPlanificada.coordenadas.length > 1 && (
+        <>
+          <Polyline
+            positions={rutaPlanificada.coordenadas.map(aLatLng)}
+            color="#ffffff"
+            weight={10}
+            opacity={0.85}
+            interactive={false}
+          />
+          <Polyline
+            positions={rutaPlanificada.coordenadas.map(aLatLng)}
+            color={colorPlanificada}
+            weight={6}
+            opacity={0.95}
+          >
+            <Popup>
+              <div style={{ fontFamily: 'var(--font-body)', minWidth: 200 }}>
+                <strong>
+                  Ruta planificada
+                  {seguridadPlanificada && ` · ${etiquetaSeguridad(seguridadPlanificada.nivel)}`}
+                </strong>
+                <br />
+                <span style={{ fontSize: 12 }}>📏 {formatearMetros(rutaPlanificada.distanciaMetros)}</span>
+                {seguridadPlanificada && (
+                  <>
+                    <br />
+                    <span style={{ fontSize: 12, color: '#aaa' }}>{seguridadPlanificada.motivo}</span>
+                  </>
+                )}
+              </div>
+            </Popup>
+          </Polyline>
+        </>
       )}
     </MapContainer>
   );

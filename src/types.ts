@@ -41,6 +41,23 @@ export interface PuntoRuta {
   tipo: 'inicio' | 'destino';
 }
 
+// ── Ruta calculada por las calles ───────────────────────────────────
+export interface PasoRuta {
+  tipo: string;            // depart | turn | arrive | roundabout ...
+  instruccion: string;     // ya en español
+  distancia: number;       // metros desde esta maniobra hasta la siguiente
+  duracion: number;        // segundos
+  posicion: Coordenada;    // punto donde ocurre la maniobra
+  nombreVia: string;
+}
+
+export interface RutaCalculada {
+  coordenadas: Coordenada[]; // geometría real por las calles
+  distanciaMetros: number;
+  duracionSegundos: number;
+  pasos: PasoRuta[];
+}
+
 // ── Incidentes ─────────────────────────────────────────────────
 export type TipoIncidente =
   | 'Accidente'
