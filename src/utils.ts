@@ -138,13 +138,31 @@ function muestrearLinea(a: Coordenada, b: Coordenada): Coordenada[] {
   return puntos;
 }
 
+// Puntos a lo largo de un recorrido real (por calles), uno cada ~100 m (máximo 250)
+function muestrearTrazado(trazado: Coordenada[]): Coordenada[] {
+  const paso = Math.max(PASO_MUESTREO_KM, 0);
+  const muestras: Coordenada[] = [trazado[0]];
+  let acumulado = 0;
+  for (let i = 1; i < trazado.length; i++) {
+    acumulado += distanciaHaversineKm(trazado[i - 1], trazado[i]);
+    if (acumulado >= paso) { muestras.push(trazado[i]); acumulado = 0; }
+  }
+  const ultimo = trazado[trazado.length - 1];
+  if (muestras[muestras.length - 1] !== ultimo) muestras.push(ultimo);
+  if (muestras.length <= 250) return muestras;
+  const salto = Math.ceil(muestras.length / 250);
+  return muestras.filter((_, i) => i % salto === 0 || i === muestras.length - 1);
+}
+
+// Si se entrega `trazado` (recorrido real por calles) se evalúa ese camino; si no, la línea recta inicio-fin.
 export function estimarSeguridadRuta(
   inicio: Coordenada,
   fin: Coordenada,
   rutas: RutaCiclista[],
-  marcadores: MarcadorMapa[]
+  marcadores: MarcadorMapa[],
+  trazado?: Coordenada[]
 ): EstimacionSeguridadRuta {
-  const muestras = muestrearLinea(inicio, fin);
+  const muestras = trazado && trazado.length >= 2 ? muestrearTrazado(trazado) : muestrearLinea(inicio, fin);
 
   // 1. Riesgo de cada punto según las rutas conocidas cercanas (más cerca = más peso)
   const riesgos: number[] = [];   // riesgo de cada punto que tiene datos

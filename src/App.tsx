@@ -6,12 +6,13 @@ import { PanelFiltros }       from './components/PanelFiltros';
 import { PlanificadorRuta }      from './components/PlanificadorRuta';
 import { ModalFinalizarRuta }  from './components/ModalFinalizarRuta';
 import { ModalReporte }       from './components/ModalReporte';
+import { PanelGuia } from './components/PanelGuia';
+import { ModalResumenRecorrido } from './components/ModalResumenRecorrido';
+import { HistorialRecorridos } from './components/HistorialRecorridos';
 import { DescargarApp }          from './components/DescargarApp';
 import { ModalSuscripcion }    from './components/ModalSuscripcion';
-import { PanelGuia }           from './components/PanelGuia';
 import { ProveedorAvisos, useAviso } from './components/Aviso';
 import { PantallaLogin } from './components/PantallaLogin';
-import { NuevaContrasena } from './components/NuevaContrasena';
 import { supabaseConfigurado } from './supabase';
 import { useSesion, nombreDeUsuario } from './sesion';
 import type { User } from '@supabase/supabase-js';
@@ -19,31 +20,31 @@ import type { User } from '@supabase/supabase-js';
 import { rutasCiclistas as rutasIniciales, marcadoresMapa } from './data';
 import {
   RutaCiclista, NivelSeguridad, PuntoRuta,
-  ReporteIncidente, TipoPlan, CuentaUsuario, PestanaLateral, ModoClic, Coordenada, RutaCalculada,
+  ReporteIncidente, TipoPlan, CuentaUsuario, PestanaLateral, ModoClic, Coordenada,
 } from './types';
 import { obtenerUbicacionActual, observarUbicacion } from './ubicacion';
+import { useRecorrido } from './recorrido';
+import { calcularRutaPorCalles, rutaRecta, puntosIntermedios, viaRestante, ajustarRutasConocidas } from './ruteo';
+import type { RutaCalculada } from './ruteo';
+import { useGuia } from './guia';
+import { hablar, desbloquearVoz, detenerVoz, leerVozActiva, establecerVozActiva, duracionHablada, distanciaHablada } from './voz';
+import type { Recorrido } from './recorrido';
+import { cargarCiclorrutasOficiales, porcentajeSobreCiclorruta } from './ciclorrutasOficiales';
+import type { ResultadoCiclorrutas } from './ciclorrutasOficiales';
 import { estimarTiempoRecorrido, minutosPorDistancia, formatearDuracion, formatearDistancia, formatearCronometro, distanciaHaversineKm } from './utils';
 import { promedioCalificacion, formatearCalificacion, estimarSeguridadRuta, colorSeguridad, etiquetaSeguridad } from './utils';
-import { useGuiaRuta } from './useGuiaRuta';
-import { useRutasSobreVias } from './useRutasSobreVias';
-import { calcularRutaReal, muestrear, distanciaMetros } from './enrutamiento';
-
-const ID_RUTA_PERSONALIZADA = 'ruta-personalizada';
 
 // ── App envuelta en proveedores ──────────────────────────────────
 // Si Supabase está configurado, primero hay que iniciar sesión.
 // Si no lo está, la app funciona sin login (modo demostración).
 export default function App() {
-  const { usuario, cargando, recuperando, terminarRecuperacion, cerrarSesion } = useSesion();
+  const { usuario, cargando, cerrarSesion } = useSesion();
 
   let contenido;
   if (!supabaseConfigurado) {
     contenido = <AppInterna usuario={null} />;
   } else if (cargando) {
     contenido = <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)', color: 'var(--muted)' }}>Cargando…</div>;
-  } else if (recuperando) {
-    // La recuperación va ANTES que el login y que el mapa
-    contenido = <NuevaContrasena alTerminar={terminarRecuperacion} />;
   } else if (!usuario) {
     contenido = <PantallaLogin />;
   } else {
@@ -68,10 +69,19 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
   const [modoClic, setModoClic]           = useState<ModoClic>(null);
 
   // Se recalcula automáticamente apenas hay inicio y destino elegidos
+  // Recorrido por las calles reales (se calcula al elegir un destino)
+  const [trazado, setTrazado] = useState<RutaCalculada | null>(null);
+  const [calculandoTrazado, setCalculandoTrazado] = useState(false);
+
   const seguridadPlanificada = useMemo(() => {
-    if (!puntoInicio || !puntoDestino) return null;
+    if (!puntoDestino) return null;
+    if (trazado && trazado.puntos.length > 1) {
+      const pts = trazado.puntos;
+      return estimarSeguridadRuta(pts[0], pts[pts.length - 1], rutas, marcadoresMapa, pts);
+    }
+    if (!puntoInicio) return null;
     return estimarSeguridadRuta(puntoInicio.posicion, puntoDestino.posicion, rutas, marcadoresMapa);
-  }, [puntoInicio, puntoDestino, rutas]);
+  }, [puntoInicio, puntoDestino, rutas, trazado]);
 
   // ── Ruta activa (navegación en curso) ────────────────
   const [rutaActiva, setRutaActiva]       = useState<RutaCiclista | null>(null);
@@ -118,6 +128,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
   const [segundos, setSegundos] = useState(0);              // cronómetro de la ruta en curso
   const [segundosFinal, setSegundosFinal] = useState(0);    // tiempo real al terminar
   const [avisoCerrado, setAvisoCerrado] = useState(false);  // el usuario cerró el aviso de seguridad
+  // El aviso vuelve a aparecer cuando cambia el destino (no cada vez que te mueves)
   // Panel lateral (en celular se puede ocultar para ver el mapa completo)
   const [panelOculto, setPanelOculto] = useState(false);
   const huboDestino = useRef(false);
@@ -135,96 +146,154 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
     return () => clearInterval(intervalo);
   }, [rutaActiva, finalizarAbierto]);
 
+  const tiempoPlanificado = useMemo(() => {
+    if (!puntoDestino) return null;
+    if (trazado && trazado.porCalles) {
+      return { distanciaKm: trazado.distanciaKm, minutos: minutosPorDistancia(trazado.distanciaKm, velocidadKmh) };
+    }
+    if (!puntoInicio) return null;
+    return estimarTiempoRecorrido(puntoInicio.posicion, puntoDestino.posicion, velocidadKmh);
+  }, [puntoInicio, puntoDestino, velocidadKmh, trazado]);
+
   const ultimaPosicion = useRef<Coordenada | null>(null);
 
-  // ── Ruta real por las calles + guía por voz ─────────────────────────────
-  const [posicionGps, setPosicionGps] = useState<Coordenada | null>(null);   // GPS real (aunque el inicio sea manual)
-  const [vozActiva, setVozActiva] = useState(true);
-  const [rutaPlanificada, setRutaPlanificada] = useState<RutaCalculada | null>(null);
-  const [idRutaCalculada, setIdRutaCalculada] = useState<string | null>(null);
-  const [recalculos, setRecalculos] = useState(0);
-  const coordenadasAjustadas = useRutasSobreVias(rutas);
+  // ── Ciclorrutas oficiales (archivo public/datos/ciclorutas.geojson) ──────
+  const [ciclorrutas, setCiclorrutas] = useState<ResultadoCiclorrutas | null>(null);
+  const [verCiclorrutas, setVerCiclorrutas] = useState(true);
+  useEffect(() => { cargarCiclorrutasOficiales().then(setCiclorrutas); }, []);
 
-  // Refs para leer valores actuales sin volver a disparar el cálculo en cada lectura del GPS
-  const inicioRef = useRef(puntoInicio);            inicioRef.current = puntoInicio;
-  const rutaActivaRef = useRef(rutaActiva);         rutaActivaRef.current = rutaActiva;
-  const ajustadasRef = useRef(coordenadasAjustadas); ajustadasRef.current = coordenadasAjustadas;
-  const velocidadRef = useRef(velocidadKmh);        velocidadRef.current = velocidadKmh;
-  const inicioCalculado = useRef<Coordenada | null>(null);
-  const falloRutaAvisado = useRef(false);
+  // ── Recorrido real del usuario (se registra solo al moverse) ─────────────
+  const rutaActivaRef = useRef<RutaCiclista | null>(null);
+  rutaActivaRef.current = rutaActiva;
+  const destinoRef = useRef<PuntoRuta | null>(null);
+  destinoRef.current = puntoDestino;
+  const finalizarLibreRef = useRef<() => void>(() => {});
+  const recorrido = useRecorrido(usuario?.id ?? 'local', () => {
+    if (!rutaActivaRef.current) finalizarLibreRef.current();
+  });
+  const [resumen, setResumen] = useState<{ recorrido: Recorrido; titulo: string } | null>(null);
+  const [trazaVista, setTrazaVista] = useState<Coordenada[]>([]);
+  const [extraRecorrido, setExtraRecorrido] = useState('');
+  const gps = useRef<{ registrar: (c: Coordenada) => void; llegada: (c: Coordenada) => void }>({ registrar: () => {}, llegada: () => {} });
 
-  const hayInicio = Boolean(puntoInicio);
-  const latDestino = puntoDestino?.posicion.latitud;
-  const lonDestino = puntoDestino?.posicion.longitud;
-  const idRutaActiva = rutaActiva?.id ?? null;
+  const terminarRecorridoLibre = (titulo = '🧭 Resumen de tu recorrido', anunciar = true) => {
+    const rec = recorrido.terminar();
+    setGuiaActiva(false);
+    if (rec) {
+      setResumen({ recorrido: rec, titulo });
+      setTrazaVista(rec.puntos);
+      if (anunciar) hablar(`Has culminado tu recorrido. Tardaste ${duracionHablada(rec.segundos)}. Recorriste ${distanciaHablada(rec.distanciaKm * 1000)}.`, true);
+    } else {
+      mostrarAviso('Recorrido muy corto, no se guardó.', 'info');
+      if (anunciar) hablar('Has llegado a tu destino.', true);
+    }
+  };
+  finalizarLibreRef.current = () => terminarRecorridoLibre('🧭 Tu recorrido terminó (sin movimiento)', false);
 
-  // Calcula la ruta real. Solo se repite al cambiar destino, ruta activa o al desviarte (recalculos)
+  // ── Recorrido por calles reales y guía por voz ───────────────────────────
+  const [guiaActiva, setGuiaActiva] = useState(false);
+  const [vozActiva, setVozActiva] = useState<boolean>(leerVozActiva);
+  const [ajusteGuia, setAjusteGuia] = useState<Coordenada[]>([]);
+  const [posicionGps, setPosicionGps] = useState<Coordenada | null>(null);
+  const claveTrazado = useRef('');
+  const inicioDelTrazado = useRef<Coordenada | null>(null);
+  const idSolicitud = useRef(0);
+  const guiaPendiente = useRef(false);
+  const avisoSinRuteo = useRef(false);
+
+  const porcentajeCiclorruta = useMemo(
+    () => (trazado && trazado.porCalles ? porcentajeSobreCiclorruta(trazado.puntos, ciclorrutas) : null),
+    [trazado, ciclorrutas],
+  );
+
+  const arrancarGuia = (ruta: RutaCalculada) => {
+    desbloquearVoz();
+    setGuiaActiva(true);
+    setPanelOculto(true);
+    setAjusteGuia(ultimaPosicion.current ? [ultimaPosicion.current, ...ruta.puntos] : ruta.puntos);
+    const destino = (destinoRef.current?.direccion || 'tu destino').split(' · ')[0];
+    const minutos = minutosPorDistancia(ruta.distanciaKm, velocidadKmh);
+    hablar(`Comenzamos. Vas hacia ${destino}. Son ${distanciaHablada(ruta.distanciaKm * 1000)}, aproximadamente ${duracionHablada(minutos * 60)}.`, true);
+  };
+
+  const detenerGuia = () => { setGuiaActiva(false); detenerVoz(); };
+
+  const alternarVoz = () => {
+    const nueva = !vozActiva;
+    setVozActiva(nueva);
+    establecerVozActiva(nueva);
+    if (nueva) { desbloquearVoz(); hablar('Voz activada.'); }
+  };
+
+  const calcularTrazado = async (origen: Coordenada, destino: Coordenada, via: Coordenada[] = []) => {
+    const id = ++idSolicitud.current;
+    setCalculandoTrazado(true);
+    let resultado: RutaCalculada;
+    try {
+      resultado = await calcularRutaPorCalles([origen, ...via, destino]);
+    } catch {
+      resultado = rutaRecta(origen, destino, via);
+      if (!avisoSinRuteo.current) {
+        avisoSinRuteo.current = true;
+        mostrarAviso('No pudimos calcular el recorrido por las calles (sin conexión). Se muestra una línea aproximada.', 'info');
+      }
+    }
+    if (id !== idSolicitud.current) return;   // llegó tarde: ya hay otra solicitud más reciente
+    inicioDelTrazado.current = origen;
+    setTrazado(resultado);
+    setCalculandoTrazado(false);
+    if (guiaPendiente.current) { guiaPendiente.current = false; arrancarGuia(resultado); }
+  };
+
+  // Puntos de la ruta elegida que hay que respetar (se omite el primero si ya estás cerca de él)
+  const viaDeRuta = (ruta: RutaCiclista, origen: Coordenada): Coordenada[] => {
+    const intermedios = puntosIntermedios(ruta.coordenadas, 10);
+    return distanciaHaversineKm(origen, ruta.coordenadas[0]) > 0.15 ? [ruta.coordenadas[0], ...intermedios] : intermedios;
+  };
+
+  // Se recalcula al cambiar el destino o la ruta elegida, o si te alejas >200 m del punto de partida del trazado
   useEffect(() => {
-    const inicio = inicioRef.current;
-    if (!inicio || latDestino === undefined || lonDestino === undefined) {
-      setRutaPlanificada(null);
-      setIdRutaCalculada(null);
-      inicioCalculado.current = null;
+    if (!puntoDestino) {
+      claveTrazado.current = '';
+      inicioDelTrazado.current = null;
+      idSolicitud.current++;
+      setTrazado(null);
+      setCalculandoTrazado(false);
       return;
     }
-    const destino: Coordenada = { latitud: latDestino, longitud: lonDestino };
-    const activa = rutaActivaRef.current;
-    // Con una ruta recomendada en curso se pasa por sus puntos; si no (destino elegido por ti), directo inicio → destino
-    const puntos: Coordenada[] = activa && activa.id !== ID_RUTA_PERSONALIZADA
-      ? [inicio.posicion, ...muestrear(ajustadasRef.current[activa.id] ?? activa.coordenadas, 23)]
-      : [inicio.posicion, destino];
-
-    inicioCalculado.current = inicio.posicion;
-    const controlador = new AbortController();
-    calcularRutaReal(puntos, controlador.signal)
-      .then(r => { setRutaPlanificada(r); setIdRutaCalculada(idRutaActiva); })
-      .catch(e => {
-        if (e?.name === 'AbortError') return;
-        // Respaldo: línea recta, para que la app siga funcionando sin el servicio
-        const d = distanciaMetros(inicio.posicion, destino);
-        setRutaPlanificada({
-          coordenadas: [inicio.posicion, destino],
-          distanciaMetros: d,
-          duracionSegundos: d / (velocidadRef.current / 3.6),
-          pasos: [],
-        });
-        setIdRutaCalculada(idRutaActiva);
-        if (!falloRutaAvisado.current) {
-          falloRutaAvisado.current = true;
-          mostrarAviso('No pudimos trazar la ruta por las calles. Mostrando línea recta.', 'info');
-        }
-      });
-    return () => controlador.abort();
+    if (!puntoInicio) return;
+    const clave = `${puntoDestino.posicion.latitud.toFixed(5)},${puntoDestino.posicion.longitud.toFixed(5)}|${rutaActiva?.id ?? ''}`;
+    const origen = puntoInicio.posicion;
+    const claveNueva = clave !== claveTrazado.current;
+    const lejos = !inicioDelTrazado.current || distanciaHaversineKm(inicioDelTrazado.current, origen) > 0.2;
+    if (!claveNueva && (guiaActiva || !lejos)) return;
+    const temporizador = setTimeout(() => {
+      claveTrazado.current = clave;
+      if (claveNueva) setTrazado(null);
+      void calcularTrazado(origen, puntoDestino.posicion, rutaActiva ? viaDeRuta(rutaActiva, origen) : []);
+    }, claveNueva ? 300 : 0);
+    return () => clearTimeout(temporizador);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hayInicio, latDestino, lonDestino, recalculos, idRutaActiva]);
+  }, [puntoInicio, puntoDestino, rutaActiva, guiaActiva]);
 
-  // Sin ruta en curso: si el inicio se aleja más de 150 m de donde se calculó, se recalcula
-  useEffect(() => {
-    if (idRutaActiva || !puntoInicio || !inicioCalculado.current || !rutaPlanificada) return;
-    if (distanciaHaversineKm(inicioCalculado.current, puntoInicio.posicion) > 0.15) setRecalculos(n => n + 1);
-  }, [puntoInicio, idRutaActiva, rutaPlanificada]);
+  // Si el usuario se sale del recorrido, se calcula uno nuevo desde donde está
+  const recalcularDesvio = () => {
+    const pos = ultimaPosicion.current;
+    const destino = destinoRef.current;
+    if (!pos || !destino) return;
+    const ruta = rutaActivaRef.current;
+    void calcularTrazado(pos, destino.posicion, ruta ? viaRestante(ruta.coordenadas, pos) : []);
+  };
 
-  // Tiempo y distancia reales (con TU velocidad promedio)
-  const tiempoPlanificado = useMemo(() => {
-    if (!puntoInicio || !puntoDestino) return null;
-    if (rutaPlanificada) {
-      const km = rutaPlanificada.distanciaMetros / 1000;
-      return { minutos: minutosPorDistancia(km, velocidadKmh), distanciaKm: km };
-    }
-    return estimarTiempoRecorrido(puntoInicio.posicion, puntoDestino.posicion, velocidadKmh);
-  }, [puntoInicio, puntoDestino, rutaPlanificada, velocidadKmh]);
-
-  // Guía por voz: arranca cuando hay ruta en curso Y ya se calculó el trayecto de esa ruta
-  const guiaLista = Boolean(rutaActiva) && rutaPlanificada !== null && idRutaCalculada === idRutaActiva;
-  const guia = useGuiaRuta({
-    ruta: rutaPlanificada,
-    posicion: posicionGps,
-    activa: guiaLista,
-    segundos,
-    voz: vozActiva,
-    alDesviarse: () => setRecalculos(n => n + 1),
-    alFinalizar: (total) => { setSegundosFinal(total); setFinalizarAbierto(true); },
+  const estadoGuia = useGuia({
+    ruta: trazado, activa: guiaActiva, posicion: posicionGps, marcadores: marcadoresMapa,
+    velocidadKmh, tramo: rutaActiva, incidentes, alDesviarse: recalcularDesvio,
   });
+
+  // Las rutas conocidas se ajustan a las calles reales (una vez; queda guardado en el dispositivo)
+  useEffect(() => ajustarRutasConocidas(rutasIniciales, (id, coordenadas, distanciaKm) => {
+    setRutas(anteriores => anteriores.map(r => (r.id === id ? { ...r, coordenadas, distancia: distanciaKm } : r)));
+  }), []);
 
   // Toma la ubicación del dispositivo como punto de partida (sin que el usuario la escriba)
   const usarMiUbicacion = async (silencioso = false) => {
@@ -256,6 +325,8 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
       if (anterior && distanciaHaversineKm(anterior, coordenada) < 0.008) return;
       ultimaPosicion.current = coordenada;
       setPosicionGps(coordenada);
+      gps.current.registrar(coordenada);
+      gps.current.llegada(coordenada);
       setPuntoInicio(actual =>
         actual && actual.direccion !== 'Mi ubicación actual'
           ? actual
@@ -280,6 +351,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
   const manejarLimpiar = () => {
     setPuntoDestino(null); setModoClic(null); // el inicio siempre es la ubicación del usuario
     setPanelOculto(false);                    // se vuelve a mostrar el panel para elegir otro destino
+    setGuiaActiva(false); detenerVoz();
   };
 
   const manejarAlternarGuardado = (id: string) => {
@@ -292,53 +364,15 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
   };
 
   const manejarIniciarRuta = (ruta: RutaCiclista) => {
-    // "Despierta" la voz dentro del clic (necesario en iOS/Safari)
-    try { window.speechSynthesis?.speak(new SpeechSynthesisUtterance('')); } catch { /* sin voz */ }
+    desbloquearVoz();
+    guiaPendiente.current = true;   // la guía por voz arranca apenas esté calculado el recorrido por calles
     setSegundos(0);
-    // La ruta parte siempre desde tu ubicación real, aunque hayas marcado otro inicio a mano
-    if (ultimaPosicion.current) {
-      setPuntoInicio({ posicion: ultimaPosicion.current, direccion: 'Mi ubicación actual', tipo: 'inicio' });
-    }
     setRutaActiva(ruta);
     setRutaSeleccionada(ruta);
+    // Traza el tramo desde tu ubicación hasta el final de la ruta (con seguridad y tiempo estimado)
     const ultimo = ruta.coordenadas[ruta.coordenadas.length - 1];
     setPuntoDestino({ posicion: ultimo, direccion: ruta.nombre, tipo: 'destino' });
     mostrarAviso(`🚴 Iniciaste: ${ruta.nombre}`, 'exito');
-  };
-
-  // Inicia la navegación hacia un destino que elegiste tú (no una ruta recomendada)
-  const manejarIniciarDestino = () => {
-    if (!puntoInicio || !puntoDestino) return;
-    try { window.speechSynthesis?.speak(new SpeechSynthesisUtterance('')); } catch { /* sin voz */ }
-    const origen = ultimaPosicion.current ?? puntoInicio.posicion;
-    const km = rutaPlanificada
-      ? rutaPlanificada.distanciaMetros / 1000
-      : distanciaHaversineKm(origen, puntoDestino.posicion);
-    const personalizada: RutaCiclista = {
-      id: ID_RUTA_PERSONALIZADA,
-      nombre: puntoDestino.direccion ? `Hacia ${puntoDestino.direccion}` : 'Ruta personalizada',
-      descripcion: 'Trayecto elegido por ti',
-      coordenadas: [origen, puntoDestino.posicion],
-      nivelSeguridad: seguridadPlanificada?.nivel ?? 'moderada',
-      distancia: Number(km.toFixed(1)),
-      caracteristicas: [],
-      calificaciones: [],
-      resenas: [],
-    };
-    setSegundos(0);
-    if (ultimaPosicion.current) {
-      setPuntoInicio({ posicion: ultimaPosicion.current, direccion: 'Mi ubicación actual', tipo: 'inicio' });
-    }
-    setRutaActiva(personalizada);
-    mostrarAviso('🚴 Recorrido iniciado', 'exito');
-  };
-
-  // Cancela la navegación sin terminarla
-  const manejarCancelarRuta = () => {
-    guia.detener();
-    setRutaActiva(null);
-    setPuntoDestino(null);
-    setPanelOculto(false);
   };
 
   const manejarAbrirReporte = (idRuta?: string) => {
@@ -357,22 +391,49 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
     mostrarAviso('⚠️ Reporte enviado. ¡Gracias por ayudar!', 'exito');
   };
 
-  // Botón "Terminé la ruta": la guía dice el tiempo por voz y abre el modal
-  const manejarFinalizarRuta = () => guia.finalizarManual();
+  const manejarFinalizarRuta = () => {
+    const rec = recorrido.terminar(rutaActiva?.nombre);
+    setExtraRecorrido(rec ? ` · 🛣️ ${rec.distanciaKm.toFixed(2).replace('.', ',')} km recorridos` : '');
+    if (rec) setTrazaVista(rec.puntos);
+    setSegundosFinal(segundos);
+    setFinalizarAbierto(true);
+    setGuiaActiva(false);
+    hablar(`Has culminado tu recorrido. Tardaste ${duracionHablada(segundos)}.${rec ? ` Recorriste ${distanciaHablada(rec.distanciaKm * 1000)}.` : ''}`, true);
+  };
+
+  // Aviso de llegada: al estar a menos de 50 m del final (después de haberte alejado a más de 150 m)
+  const llegada = useRef({ clave: '', lejos: false, avisado: false });
+  const comprobarLlegada = (c: Coordenada) => {
+    const ruta = rutaActivaRef.current;
+    const destino = ruta ? ruta.coordenadas[ruta.coordenadas.length - 1] : destinoRef.current?.posicion;
+    if (!destino) return;
+    const clave = `${ruta?.id ?? 'libre'}:${destino.latitud.toFixed(5)},${destino.longitud.toFixed(5)}`;
+    if (llegada.current.clave !== clave) llegada.current = { clave, lejos: false, avisado: false };
+    const d = distanciaHaversineKm(c, destino);
+    if (d > 0.15) llegada.current.lejos = true;
+    if (!llegada.current.lejos || llegada.current.avisado || d > 0.05) return;
+    llegada.current.avisado = true;
+    try { navigator.vibrate?.([300, 150, 300]); } catch { /* sin vibración */ }
+    if (ruta) {
+      mostrarAviso('🏁 ¡Llegaste al final de la ruta!', 'exito');
+      if (!finalizarAbierto) manejarFinalizarRuta();
+    } else {
+      mostrarAviso('🎯 ¡Llegaste a tu destino!', 'exito');
+      terminarRecorridoLibre('🎯 ¡Llegaste a tu destino!');
+    }
+  };
+  gps.current = { registrar: recorrido.registrarPunto, llegada: comprobarLlegada };
 
   const manejarEnvioCalificacion = (calificacion: number, impresiones: string[], comentario: string) => {
     if (!rutaActiva) return;
-    if (rutaActiva.id !== ID_RUTA_PERSONALIZADA) {
-      setRutas(anterior => anterior.map(r => {
-        if (r.id !== rutaActiva.id) return r;
-        const nuevaResena = comentario ? [{ calificacion, comentario, impresiones, creadoEn: new Date().toISOString() }] : [];
-        return { ...r, calificaciones: [...r.calificaciones, calificacion], resenas: [...r.resenas, ...nuevaResena] };
-      }));
-    }
+    setRutas(anterior => anterior.map(r => {
+      if (r.id !== rutaActiva.id) return r;
+      const nuevaResena = comentario ? [{ calificacion, comentario, impresiones, creadoEn: new Date().toISOString() }] : [];
+      return { ...r, calificaciones: [...r.calificaciones, calificacion], resenas: [...r.resenas, ...nuevaResena] };
+    }));
     setFinalizarAbierto(false);
     setRutaActiva(null);
-    setPuntoDestino(null);
-    setPanelOculto(false);
+    manejarLimpiar();
     mostrarAviso('✅ ¡Gracias por tu reseña!', 'exito');
   };
 
@@ -386,8 +447,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
     mostrarAviso('🎉 ¡Bienvenido a Ciclo Rutas Pro! Sin publicidad 🚀', 'exito');
   };
 
-  // ═══════════════ FIN DE LA PARTE 1 ═══════════════
-     // ── Contenido de la barra lateral ───────────────────────────────────────
+  // ── Contenido de la barra lateral ───────────────────────────────────────
   const listaGuardadas = rutas.filter(r => rutasGuardadas.has(r.id));
 
   const renderizarListaRutas = (lista: RutaCiclista[]) => (
@@ -640,6 +700,8 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
                 alUsarMiUbicacion={() => usarMiUbicacion()}
                 velocidadKmh={velocidadKmh}
                 alCambiarVelocidad={setVelocidadKmh}
+                tiempo={tiempoPlanificado}
+                porCalles={Boolean(trazado?.porCalles)}
                 modoClic={modoClic}
               />
             )}
@@ -669,7 +731,14 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
             )}
 
             {pestanaActiva === 'estadisticas' && (
-              <PanelEstadisticas rutas={rutas} promedioGlobal={promedioGlobal} kmTotales={kmTotales} incidentes={incidentes} />
+              <>
+                <PanelEstadisticas rutas={rutas} promedioGlobal={promedioGlobal} kmTotales={kmTotales} incidentes={incidentes} />
+                <HistorialRecorridos
+                  recorridos={recorrido.historial}
+                  alVer={r => { setTrazaVista(r.puntos); setPanelOculto(true); }}
+                  alBorrarTodo={recorrido.borrarHistorial}
+                />
+              </>
             )}
           </div>
         </aside>
@@ -686,13 +755,27 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
             modoClic={modoClic}
             seguridadPlanificada={seguridadPlanificada}
             rutaActiva={rutaActiva}
-            seguirUsuario={Boolean(rutaActiva)}
-            rutaPlanificada={rutaPlanificada}
-            coordenadasAjustadas={coordenadasAjustadas}
+            seguirUsuario={Boolean(rutaActiva) || guiaActiva}
+            ciclorrutasOficiales={ciclorrutas}
+            mostrarCiclorrutas={verCiclorrutas}
+            trazaRecorrido={recorrido.activo ? recorrido.puntos : trazaVista}
+            ajustarATraza={trazaVista}
+            trazado={trazado ? trazado.puntos : null}
+            ajustarATrazado={ajusteGuia}
           />
 
-          {/* Aviso de seguridad del trazado — aparece apenas hay inicio y destino (se oculta durante la guía) */}
-          {seguridadPlanificada && !avisoCerrado && !rutaActiva && (
+          {/* Botones sobre el mapa: capa oficial y traza del recorrido */}
+          {ciclorrutas && (
+            <button onClick={() => setVerCiclorrutas(v => !v)} style={estiloBotonMapa(24)}>
+              🚲 Ciclorrutas oficiales {verCiclorrutas ? '✓' : '✕'}
+            </button>
+          )}
+          {trazaVista.length > 1 && !recorrido.activo && (
+            <button onClick={() => setTrazaVista([])} style={estiloBotonMapa(70)}>✕ Ocultar recorrido</button>
+          )}
+
+          {/* Aviso de seguridad del trazado — aparece apenas hay inicio y destino */}
+          {seguridadPlanificada && !avisoCerrado && !guiaActiva && (
             <div className="app-aviso-seguridad" style={{
               position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 500,
               background: 'rgba(22,27,38,0.95)',
@@ -722,6 +805,22 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
                 <div style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.35 }}>
                   {seguridadPlanificada.motivo}
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+                  <button
+                    onClick={() => trazado && arrancarGuia(trazado)}
+                    disabled={!trazado}
+                    style={{
+                      background: 'linear-gradient(135deg, #00e0a8, #00a37c)', color: '#00160f', border: 'none',
+                      borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 800,
+                      cursor: trazado ? 'pointer' : 'wait', opacity: trazado ? 1 : 0.6, fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    {trazado ? '🧭 Iniciar guía por voz' : calculandoTrazado ? 'Calculando recorrido…' : 'Preparando…'}
+                  </button>
+                  {porcentajeCiclorruta !== null && (
+                    <span style={{ fontSize: 11.5, color: 'var(--text2)' }}>🚲 {porcentajeCiclorruta}% por ciclorruta oficial</span>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => setAvisoCerrado(true)}
@@ -739,35 +838,16 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
             </div>
           )}
 
-          {/* Panel de guía por voz (mientras hay una ruta en curso) */}
-          {rutaActiva && (
+          {/* Guía paso a paso (giros, calles, sector, voz) */}
+          {guiaActiva && (
             <PanelGuia
-              paso={guia.pasoActual}
-              distanciaAlPaso={guia.distanciaAlPaso}
-              distanciaRestante={guia.distanciaRestante}
-              segundos={segundos}
-              finalizada={guia.finalizada}
-              calculando={!guiaLista}
+              estado={estadoGuia}
+              destino={puntoDestino?.direccion ?? ''}
               vozActiva={vozActiva}
-              onAlternarVoz={() => { if (vozActiva) guia.detener(); setVozActiva(v => !v); }}
+              porcentajeCiclorruta={porcentajeCiclorruta}
+              alAlternarVoz={alternarVoz}
+              alDetener={detenerGuia}
             />
-          )}
-
-          {/* Botón para empezar a navegar hacia el destino que elegiste */}
-          {puntoInicio && puntoDestino && !rutaActiva && rutaPlanificada && (
-            <button
-              onClick={manejarIniciarDestino}
-              style={{
-                position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 700,
-                background: 'var(--green)', color: '#000', border: 'none',
-                borderRadius: 24, padding: '12px 26px',
-                fontSize: 14, fontWeight: 800, cursor: 'pointer',
-                fontFamily: 'var(--font-display)', boxShadow: 'var(--shadow-md)',
-                animation: 'pulseGreen 2s infinite', whiteSpace: 'nowrap',
-              }}
-            >
-              🚴 Iniciar recorrido · {formatearDistancia(rutaPlanificada.distanciaMetros / 1000)}
-            </button>
           )}
 
           {/* Panel flotante de estadísticas */}
@@ -800,7 +880,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
           </div>
 
           {/* Instrucción: ya tenemos tu ubicación, falta el destino */}
-          {puntoInicio && !puntoDestino && !modoClic && (
+          {puntoInicio && !puntoDestino && !modoClic && !guiaActiva && (
             <div style={{
               position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 500,
               background: 'rgba(14,17,24,0.95)', border: '1px solid var(--border-hover)',
@@ -831,6 +911,28 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
         </main>
       </div>
 
+      {/* ── Barra de recorrido libre (sin ruta elegida) ───────────────── */}
+      {!rutaActiva && recorrido.activo && (
+        <div style={{
+          background: 'rgba(47,107,255,0.12)', borderTop: '1px solid rgba(47,107,255,0.35)', padding: '10px 24px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 22 }}>🧭</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>Recorriendo…</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                {recorrido.distanciaKm.toFixed(2).replace('.', ',')} km · ⏱️ {formatearCronometro(recorrido.segundos)}
+              </div>
+            </div>
+          </div>
+          <button onClick={() => terminarRecorridoLibre()} style={{
+            background: '#2f6bff', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)',
+            padding: '10px 18px', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: 'var(--font-display)',
+          }}>⏹ Terminar</button>
+        </div>
+      )}
+
       {/* ── Barra de ruta activa ─────────────────────────────────── */}
       {rutaActiva && (
         <div style={{
@@ -848,20 +950,10 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
             <span style={{ fontSize: 22 }}>🚴</span>
             <div>
               <div style={{ fontWeight: 700, fontSize: 14 }}>{rutaActiva.nombre}</div>
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{rutaActiva.distancia} km · ⏱️ {formatearCronometro(segundos)} <span style={{ opacity: 0.8 }}>(estimado {formatearDuracion(minutosPorDistancia(rutaActiva.distancia, velocidadKmh))})</span></div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{rutaActiva.distancia} km · ⏱️ {formatearCronometro(segundos)} <span style={{ opacity: 0.8 }}>(estimado {formatearDuracion(minutosPorDistancia(rutaActiva.distancia, velocidadKmh))})</span>{recorrido.activo && <> · 🛣️ {recorrido.distanciaKm.toFixed(2).replace('.', ',')} km recorridos</>}</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button
-              onClick={manejarCancelarRuta}
-              style={{
-                background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)',
-                borderRadius: 'var(--radius-md)', padding: '8px 14px', fontSize: 12, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'var(--font-body)',
-              }}
-            >
-              ✕ Cancelar
-            </button>
             <button
               onClick={() => manejarAbrirReporte(rutaActiva.id)}
               style={{
@@ -879,7 +971,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
               ⚠️ Reportar incidente
             </button>
             <button
-              onClick={manejarFinalizarRuta}
+              onClick={() => manejarFinalizarRuta()}
               style={{
                 background: 'var(--green)',
                 color: '#000',
@@ -903,9 +995,16 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
       <ModalFinalizarRuta
         abierto={finalizarAbierto}
         ruta={rutaActiva}
-        tiempoReal={formatearCronometro(segundosFinal)}
+        tiempoReal={formatearCronometro(segundosFinal) + extraRecorrido}
         alCerrar={() => setFinalizarAbierto(false)}
         alEnviar={manejarEnvioCalificacion}
+      />
+
+      <ModalResumenRecorrido
+        recorrido={resumen?.recorrido ?? null}
+        titulo={resumen?.titulo}
+        alCerrar={() => setResumen(null)}
+        alVerEnMapa={r => { setTrazaVista(r.puntos); setPanelOculto(true); }}
       />
 
       <ModalReporte
@@ -1087,4 +1186,14 @@ function PanelEstadisticas({ rutas, promedioGlobal, kmTotales, incidentes }: {
       )}
     </div>
   );
+}
+
+// Estilo de los botones flotantes sobre el mapa
+function estiloBotonMapa(abajo: number): React.CSSProperties {
+  return {
+    position: 'absolute', right: 68, bottom: abajo, zIndex: 1000,
+    background: 'rgba(22,27,38,0.95)', color: 'var(--text)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 12.5, fontWeight: 600,
+    cursor: 'pointer', boxShadow: 'var(--shadow-md)', fontFamily: 'var(--font-body)',
+  };
 }

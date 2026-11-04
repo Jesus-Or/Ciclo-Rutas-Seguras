@@ -14,10 +14,12 @@ interface PropiedadesPlanificadorRuta {
   alUsarMiUbicacion: () => void;
   velocidadKmh: number;
   alCambiarVelocidad: (kmh: number) => void;
+  tiempo?: { distanciaKm: number; minutos: number } | null;   // calculado sobre las calles reales
+  porCalles?: boolean;
 }
 
 export function PlanificadorRuta({
-  puntoInicio, puntoDestino, alFijarDestino, alLimpiar, alCambiarModoClic, modoClic, alUsarMiUbicacion, velocidadKmh, alCambiarVelocidad,
+  puntoInicio, puntoDestino, alFijarDestino, alLimpiar, alCambiarModoClic, modoClic, alUsarMiUbicacion, velocidadKmh, alCambiarVelocidad, tiempo = null, porCalles = false,
 }: PropiedadesPlanificadorRuta) {
 
   return (
@@ -73,7 +75,7 @@ export function PlanificadorRuta({
 
       {/* ── Tiempo estimado del recorrido ──────────────────────── */}
       {puntoInicio && puntoDestino && (() => {
-        const estimacion = estimarTiempoRecorrido(puntoInicio.posicion, puntoDestino.posicion, velocidadKmh);
+        const estimacion = tiempo ?? estimarTiempoRecorrido(puntoInicio.posicion, puntoDestino.posicion, velocidadKmh);
         return (
           <div style={{
             border: '1px solid var(--border-hover)', background: 'var(--bg3)',
@@ -85,7 +87,7 @@ export function PlanificadorRuta({
                 {formatearDuracion(estimacion.minutos)}
               </span>
               <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                {formatearDistancia(estimacion.distanciaKm)} aprox. a {velocidadKmh} km/h
+                {formatearDistancia(estimacion.distanciaKm)} {porCalles ? 'por las calles' : 'aprox.'} a {velocidadKmh} km/h
               </span>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

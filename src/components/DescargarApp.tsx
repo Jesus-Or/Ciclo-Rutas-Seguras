@@ -13,6 +13,24 @@ const agente = typeof navigator !== 'undefined' ? navigator.userAgent : '';
 const ESTA_EN_IOS = /iphone|ipad|ipod/i.test(agente);
 const ESTA_EN_ANDROID = /android/i.test(agente);
 
+const DEGRADADO = 'linear-gradient(135deg, #00e0a8 0%, #00c896 45%, #00a37c 100%)';
+
+// Animaciones y efectos al pasar el mouse (solo para este componente)
+const ESTILOS = `
+@keyframes descargaBrillo { 0% { transform: translateX(-120%) skewX(-20deg); } 60%,100% { transform: translateX(260%) skewX(-20deg); } }
+@keyframes descargaLatido { 0%,100% { box-shadow: 0 0 0 0 rgba(0,200,150,0.55), 0 4px 14px rgba(0,200,150,0.35); } 50% { box-shadow: 0 0 0 8px rgba(0,200,150,0), 0 4px 14px rgba(0,200,150,0.35); } }
+@keyframes descargaFlota { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+.descarga-boton-header { position: relative; overflow: hidden; animation: descargaLatido 2.6s ease-in-out infinite; transition: transform .15s ease; }
+.descarga-boton-header:hover { transform: translateY(-1px) scale(1.03); }
+.descarga-boton-header::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent); animation: descargaBrillo 3.4s ease-in-out infinite; }
+.descarga-cta { position: relative; overflow: hidden; transition: transform .15s ease, box-shadow .15s ease, filter .15s ease; }
+.descarga-cta:hover { transform: translateY(-2px); filter: brightness(1.06); box-shadow: 0 10px 26px rgba(0,200,150,0.35); }
+.descarga-cta:active { transform: translateY(0); }
+.descarga-secundario:hover { border-color: rgba(0,200,150,0.55) !important; background: rgba(0,200,150,0.08) !important; }
+.descarga-icono { animation: descargaFlota 3.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .descarga-boton-header, .descarga-icono, .descarga-boton-header::after { animation: none !important; } }
+`;
+
 // Botón "Descargar app": solo se muestra en la versión web, no dentro de la app instalada.
 export function DescargarApp() {
   const [abierto, setAbierto] = useState(false);
@@ -42,110 +60,175 @@ export function DescargarApp() {
     setEventoInstalacion(null);
   };
 
-  const bloqueAndroid = (
-    <div key="android" style={{ display: 'grid', gap: 10 }}>
+  // ── Tarjeta de Android ──────────────────────────────────────────────
+  const tarjetaAndroid = (
+    <TarjetaPlataforma key="android" icono="🤖" nombre="Android" detalle="Instalación directa" recomendada={ESTA_EN_ANDROID}>
       {eventoInstalacion ? (
-        <button onClick={instalarWeb} style={{ ...estiloOpcion, background: 'var(--green)', color: '#000', border: 'none' }}>
-          🌐 Continuar con Chrome / Instalar App
+        <button className="descarga-cta" onClick={instalarWeb} style={estiloBotonPrincipal}>
+          <span style={{ fontSize: 18 }}>⚡</span> Instalar ahora
         </button>
       ) : (
-        <div style={{ ...estiloOpcion, cursor: 'default', textAlign: 'left', fontWeight: 400, fontSize: 13, lineHeight: 1.6 }}>
-          <strong style={{ color: 'var(--text)' }}>🌐 Continuar con Chrome</strong>
-          <br />Abre el menú <strong>⋮</strong> de Chrome y elige <strong>“Instalar app”</strong> o <strong>“Añadir a pantalla de inicio”</strong>.
-        </div>
+        <Pasos pasos={[
+          <>Abre el menú <strong>⋮</strong> de Chrome</>,
+          <>Elige <strong>“Instalar app”</strong> o <strong>“Añadir a pantalla de inicio”</strong></>,
+        ]} />
       )}
-      
-      <a href={URL_APK_ANDROID} style={{ ...estiloOpcion, background: 'var(--bg3)', color: 'var(--text)' }}>
-        📦 Descargar el instalador (.apk)
+      <a className={eventoInstalacion ? 'descarga-secundario' : 'descarga-cta'} href={URL_APK_ANDROID}
+        style={eventoInstalacion ? estiloBotonSecundario : estiloBotonPrincipal}>
+        <span style={{ fontSize: 17 }}>📦</span> Descargar instalador (.apk)
       </a>
-
-      {/* Botón para Iniciar sesión con Google integrado en las opciones de Android */}
-      <button 
-        onClick={() => {
-          setAbierto(false);
-          const botonLogin = document.querySelector('[data-action="login"]') as HTMLButtonElement;
-          if (botonLogin) {
-            botonLogin.click();
-          } else {
-            window.location.hash = '#login'; 
-          }
-        }} 
-        style={{ ...estiloOpcion, background: '#fff', color: '#757575', border: '1px solid #ddd', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-      >
-        <svg width="18" height="18" viewBox="0 0 18 18" style={{ display: 'block' }}>
-          <path d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.47h4.84c-.21 1.12-.84 2.07-1.79 2.7v2.24h2.9c1.69-1.55 2.69-3.85 2.69-6.57z" fill="#4285F4"/>
-          <path d="M9 18c2.43 0 4.47-.8 5.96-2.23l-2.9-2.24c-.8.54-1.84.87-3.06.87-2.35 0-4.34-1.58-5.05-3.71H.92v2.32C2.4 15.86 5.43 18 9 18z" fill="#34A853"/>
-          <path d="M3.95 10.69c-.18-.54-.28-1.12-.28-1.69s.1-1.15.28-1.69V5.01H.92A8.99 8.99 0 0 0 0 9c0 1.46.35 2.85.92 4.09l3.03-2.4z" fill="#FBBC05"/>
-          <path d="M9 3.58c1.32 0 2.5.45 3.44 1.35L15 2.4A8.99 8.99 0 0 0 9 0C5.43 0 2.4 2.14.92 5.01l3.03 2.32C4.66 5.16 6.65 3.58 9 3.58z" fill="#EA4335"/>
-        </svg>
-        Iniciar sesión con Google
-      </button>
-    </div>
+    </TarjetaPlataforma>
   );
 
-  const bloqueIos = ENLACE_IOS ? (
-    <a key="ios" href={ENLACE_IOS} target="_blank" rel="noreferrer" style={{ ...estiloOpcion, background: 'var(--accent)', color: '#fff' }}>
-      🍎 Obtener para iPhone (TestFlight / App Store)
-    </a>
-  ) : (
-    <div key="ios" style={{ ...estiloOpcion, cursor: 'default', textAlign: 'left', fontWeight: 400, fontSize: 13, lineHeight: 1.6 }}>
-      <strong style={{ color: 'var(--text)' }}>🍎 iPhone (versión de prueba)</strong>
-      <br />1. Abre esta página en <strong>Safari</strong>.
-      <br />2. Toca <strong>Compartir</strong> (cuadro con flecha ↑).
-      <br />3. Elige <strong>“Añadir a pantalla de inicio”</strong>.
-    </div>
+  // ── Tarjeta de iPhone ───────────────────────────────────────────────
+  const tarjetaIos = (
+    <TarjetaPlataforma key="ios" icono="🍎" nombre="iPhone" detalle={ENLACE_IOS ? 'TestFlight / App Store' : 'Desde Safari'} recomendada={ESTA_EN_IOS}>
+      {ENLACE_IOS ? (
+        <a className="descarga-cta" href={ENLACE_IOS} target="_blank" rel="noreferrer" style={estiloBotonPrincipal}>
+          <span style={{ fontSize: 17 }}>🍎</span> Obtener para iPhone
+        </a>
+      ) : (
+        <Pasos pasos={[
+          <>Abre esta página en <strong>Safari</strong></>,
+          <>Toca <strong>Compartir</strong> (el cuadro con flecha ↑)</>,
+          <>Elige <strong>“Añadir a pantalla de inicio”</strong></>,
+        ]} />
+      )}
+    </TarjetaPlataforma>
   );
 
-  // Se muestra primero lo que corresponde al celular del usuario
-  const bloques = ESTA_EN_IOS ? [bloqueIos, bloqueAndroid] : ESTA_EN_ANDROID ? [bloqueAndroid, bloqueIos] : [bloqueAndroid, bloqueIos];
+  // Primero lo que corresponde al celular del usuario
+  const tarjetas = ESTA_EN_IOS ? [tarjetaIos, tarjetaAndroid] : [tarjetaAndroid, tarjetaIos];
 
   return (
     <>
-      <button onClick={() => setAbierto(true)} style={estiloBotonHeader}>
+      <style>{ESTILOS}</style>
+
+      <button className="descarga-boton-header" onClick={() => setAbierto(true)} style={estiloBotonHeader}>
         📲 Descargar app
       </button>
 
       <Modal
         abierto={abierto}
         alCerrar={() => setAbierto(false)}
-        titulo="📲 Descargar la app"
-        subtitulo="Instala Ciclo Rutas Seguras en tu celular o continúa con tu cuenta"
+        titulo="Descarga la app"
+        subtitulo="Llévala en tu bolsillo, lista para rodar"
+        anchoMaximo={480}
       >
-        <div style={{ display: 'grid', gap: 12 }}>{bloques}</div>
+        {/* Presentación de la app */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 14, padding: 16, marginBottom: 14,
+          borderRadius: 'var(--radius-lg)', border: '1px solid rgba(0,200,150,0.25)',
+          background: 'radial-gradient(120% 140% at 0% 0%, rgba(0,200,150,0.18) 0%, rgba(95,127,255,0.08) 55%, transparent 100%)',
+        }}>
+          <div className="descarga-icono" style={{
+            width: 60, height: 60, borderRadius: 16, flexShrink: 0, display: 'grid', placeItems: 'center',
+            background: DEGRADADO, fontSize: 32, boxShadow: '0 8px 22px rgba(0,200,150,0.4)',
+          }}>🚴</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 800, letterSpacing: '-0.3px' }}>Ciclo Rutas Seguras</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text2)', marginTop: 2 }}>Rutas más seguras para pedalear en Bogotá</div>
+          </div>
+        </div>
 
-        <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 14, lineHeight: 1.5 }}>
-          Con el .apk, Android pedirá permitir “instalar apps de orígenes desconocidos”. Si experimentas errores de inicio de sesión dentro del APK, utiliza la opción recomendada de <strong>Chrome</strong>.
+        {/* Ventajas */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+          {['⚡ Acceso directo', '🖥️ Pantalla completa', '📍 GPS en tu recorrido'].map(t => (
+            <span key={t} style={{
+              fontSize: 11.5, fontWeight: 600, color: 'var(--text2)', padding: '5px 10px', borderRadius: 20,
+              background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)',
+            }}>{t}</span>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gap: 12 }}>{tarjetas}</div>
+
+        <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: '16px 2px 0', lineHeight: 1.55, display: 'flex', gap: 8 }}>
+          <span aria-hidden>🔒</span>
+          <span>
+            Con el .apk, Android pedirá permitir “instalar apps de orígenes desconocidos”. Apple no permite
+            instaladores fuera de la App Store, por eso en iPhone se instala desde Safari.
+          </span>
         </p>
       </Modal>
     </>
   );
 }
 
+// ── Piezas del diseño ─────────────────────────────────────────────────
+function TarjetaPlataforma({ icono, nombre, detalle, recomendada, children }: {
+  icono: string; nombre: string; detalle: string; recomendada: boolean; children: React.ReactNode;
+}) {
+  return (
+    <div style={{
+      position: 'relative', padding: 16, borderRadius: 'var(--radius-lg)',
+      background: 'var(--bg3)', display: 'grid', gap: 12,
+      border: `1px solid ${recomendada ? 'rgba(0,200,150,0.55)' : 'var(--border)'}`,
+      boxShadow: recomendada ? '0 0 0 3px rgba(0,200,150,0.08)' : 'none',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{
+          width: 38, height: 38, borderRadius: 11, display: 'grid', placeItems: 'center', fontSize: 20,
+          background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)',
+        }}>{icono}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 800 }}>{nombre}</div>
+          <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>{detalle}</div>
+        </div>
+        {recomendada && (
+          <span style={{
+            fontSize: 10.5, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#00160f',
+            background: DEGRADADO, padding: '4px 9px', borderRadius: 20, whiteSpace: 'nowrap',
+          }}>Para tu celular</span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Pasos({ pasos }: { pasos: React.ReactNode[] }) {
+  return (
+    <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }}>
+      {pasos.map((p, i) => (
+        <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: 'var(--text2)', lineHeight: 1.45 }}>
+          <span style={{
+            width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'grid', placeItems: 'center',
+            fontSize: 11.5, fontWeight: 800, color: 'var(--green)', background: 'var(--green-dim)', border: '1px solid rgba(0,200,150,0.35)',
+          }}>{i + 1}</span>
+          <span style={{ paddingTop: 2 }}>{p}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+// ── Estilos ────────────────────────────────────────────────────────────
 const estiloBotonHeader: React.CSSProperties = {
-  background: 'var(--green)',
-  color: '#000',
+  background: DEGRADADO,
+  color: '#00160f',
   border: 'none',
   borderRadius: 20,
-  padding: '7px 14px',
-  fontSize: 12,
+  padding: '8px 16px',
+  fontSize: 12.5,
   fontWeight: 800,
   cursor: 'pointer',
   fontFamily: 'var(--font-body)',
+  whiteSpace: 'nowrap',
 };
 
-const estiloOpcion: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  boxSizing: 'border-box',
-  textAlign: 'center',
-  padding: '14px 16px',
-  borderRadius: 'var(--radius-lg)',
-  border: '1px solid var(--border)',
-  background: 'var(--bg3)',
-  color: 'var(--text2)',
-  fontSize: 14,
-  fontWeight: 700,
-  textDecoration: 'none',
-  cursor: 'pointer',
-  fontFamily: 'var(--font-body)',
+const estiloBotonPrincipal: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  width: '100%', boxSizing: 'border-box', padding: '14px 16px', borderRadius: 'var(--radius-md)',
+  border: 'none', background: DEGRADADO, color: '#00160f', fontSize: 14.5, fontWeight: 800,
+  textDecoration: 'none', cursor: 'pointer', fontFamily: 'var(--font-body)',
+  boxShadow: '0 6px 18px rgba(0,200,150,0.28)',
+};
+
+const estiloBotonSecundario: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  width: '100%', boxSizing: 'border-box', padding: '12px 16px', borderRadius: 'var(--radius-md)',
+  border: '1px solid var(--border-hover)', background: 'rgba(255,255,255,0.03)', color: 'var(--text)',
+  fontSize: 13.5, fontWeight: 700, textDecoration: 'none', cursor: 'pointer', fontFamily: 'var(--font-body)',
+  transition: 'all .15s ease',
 };
