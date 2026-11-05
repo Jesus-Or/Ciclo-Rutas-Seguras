@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-
+import { guardarResena, cargarResenas } from './resenas';
 import { MapaCiclista }           from './components/MapaCiclista';
 import { TarjetaRuta }         from './components/TarjetaRuta';
 import { PanelFiltros }       from './components/PanelFiltros';
@@ -59,6 +59,31 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
 
   // ── Datos de rutas (mutables para las calificaciones) ─────────────────────
   const [rutas, setRutas] = useState<RutaCiclista[]>(rutasIniciales);
+    // Trae las reseñas guardadas en Supabase y las suma a cada ruta (promedios y comentarios)
+  useEffect(() => {
+    let cancelado = false;
+    cargarResenas().then(filas => {
+      if (cancelado || !filas.length) return;
+      setRutas(rutasIniciales.map(r => {
+        const propias = filas.filter(f => f.ruta_id === r.id);
+        if (!propias.length) return r;
+        return {
+          ...r,
+          calificaciones: [...r.calificaciones, ...propias.map(f => f.calificacion)],
+          resenas: [
+            ...r.resenas,
+            ...propias.filter(f => f.comentario).map(f => ({
+              calificacion: f.calificacion,
+              comentario: f.comentario as string,
+              impresiones: f.impresiones ?? [],
+              creadoEn: f.creado_en,
+            })),
+          ],
+        };
+      }));
+    });
+    return () => { cancelado = true; };
+  }, []);
 
   // ── Estado del mapa ─────────────────────────────────────────────
   const [rutaSeleccionada, setRutaSeleccionada]   = useState<RutaCiclista | null>(null);
@@ -360,20 +385,47 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
   // Botón "Terminé la ruta": la guía dice el tiempo por voz y abre el modal
   const manejarFinalizarRuta = () => guia.finalizarManual();
 
-  const manejarEnvioCalificacion = (calificacion: number, impresiones: string[], comentario: string) => {
+    const manejarEnvioCalificacion = async (calificacion: number, impresiones: string[], comentario: string) => {
     if (!rutaActiva) return;
-    if (rutaActiva.id !== ID_RUTA_PERSONALIZADA) {
+    const esPersonalizada = rutaActiva.id === ID_RUTA_PERSONALIZADA;
+
+    // Se muestra en pantalla al instante (solo rutas recomendadas)
+    if (!esPersonalizada) {
       setRutas(anterior => anterior.map(r => {
         if (r.id !== rutaActiva.id) return r;
         const nuevaResena = comentario ? [{ calificacion, comentario, impresiones, creadoEn: new Date().toISOString() }] : [];
         return { ...r, calificaciones: [...r.calificaciones, calificacion], resenas: [...r.resenas, ...nuevaResena] };
       }));
     }
+
+    // Se guarda en la base de datos con los datos del recorrido
+    const errorGuardado = await guardarResena({
+      ruta_id: rutaActiva.id,
+      ruta_nombre: rutaActiva.nombre,
+      es_personalizada: esPersonalizada,
+      calificacion,
+      impresiones,
+      comentario,
+      tiempo_segundos: segundosFinal,
+      distancia_km: rutaPlanificada ? Number((rutaPlanificada.distanciaMetros / 1000).toFixed(2)) : rutaActiva.distancia,
+      nivel_seguridad: seguridadPlanificada?.nivel ?? rutaActiva.nivelSeguridad,
+      inicio_lat: puntoInicio?.posicion.latitud ?? null,
+      inicio_lon: puntoInicio?.posicion.longitud ?? null,
+      destino_lat: puntoDestino?.posicion.latitud ?? null,
+      destino_lon: puntoDestino?.posicion.longitud ?? null,
+      destino_nombre: puntoDestino?.direccion ?? null,
+    });
+
     setFinalizarAbierto(false);
     setRutaActiva(null);
     setPuntoDestino(null);
     setPanelOculto(false);
-    mostrarAviso('✅ ¡Gracias por tu reseña!', 'exito');
+    if (errorGuardado) {
+      console.warn('Reseña no guardada:', errorGuardado);
+      mostrarAviso('No pudimos guardar tu reseña. Revisa tu conexión.', 'info');
+    } else {
+      mostrarAviso('✅ ¡Gracias por tu reseña!', 'exito');
+    }
   };
 
   const manejarSuscripcion = (plan: TipoPlan) => {
