@@ -50,6 +50,8 @@ import { useRutasSobreVias } from "./useRutasSobreVias";
 import { calcularRutaReal, muestrear, distanciaMetros } from "./enrutamiento";
 
 const ID_RUTA_PERSONALIZADA = "ruta-personalizada";
+// Interruptor: pon true para volver a mostrar suscripción, publicidad y Pro
+const MOSTRAR_SUSCRIPCION = false;
 
 // ── App envuelta en proveedores ──────────────────────────────────
 // Si Supabase está configurado, primero hay que iniciar sesión.
@@ -677,14 +679,14 @@ function AppInterna({
         fontFamily: "var(--font-body)",
       }}
     >
-      {/* ── Banner freemium ──────────────────────────────────── */}
-      <BannerPrueba
-        cuenta={cuenta}
-        alSuscribirse={() => setSuscripcionAbierta(true)}
-      />
-
+           {MOSTRAR_SUSCRIPCION && (
+        <BannerPrueba
+          cuenta={cuenta}
+          alSuscribirse={() => setSuscripcionAbierta(true)}
+        />
+      )}
       {/* ── Banner de publicidad (solo en prueba) ───────────────────────────── */}
-      {!cuenta.esPremium && (
+      {MOSTRAR_SUSCRIPCION && !cuenta.esPremium && (
         <div
           className="banner-publicidad"
           style={{
@@ -815,7 +817,7 @@ function AppInterna({
           )}
           <button
             className="encabezado-cuenta"
-            onClick={() => setSuscripcionAbierta(true)}
+            onClick={() => { if (MOSTRAR_SUSCRIPCION) setSuscripcionAbierta(true); }}
             style={{
               background: "var(--bg3)",
               border: "1px solid var(--border)",
