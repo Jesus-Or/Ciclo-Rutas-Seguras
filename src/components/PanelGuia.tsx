@@ -23,7 +23,7 @@ function icono(paso: PasoRuta | null): string {
   if (t.includes('glorieta')) return '🔄';
   if (t.includes('izquierda')) return '⬅️';
   if (t.includes('derecha')) return '➡️';
-
+  
   return '⬆️';
 }
 
@@ -39,13 +39,10 @@ export function PanelGuia({
   seguridad,
 }: Props) {
   return (
-    <div
+    <div 
+     className="panel-guia"
       style={{
-        position: 'absolute',
-        top: 12,
-        left: 12,
-        right: 12,
-        zIndex: 600,
+        position: 'absolute', top: 12, left: 12, right: 12, zIndex: 600,
         maxWidth: 520,
         margin: '0 auto',
         background: 'rgba(22,27,38,0.96)',

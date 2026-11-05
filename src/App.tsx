@@ -756,6 +756,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
           {/* Botón para empezar a navegar hacia el destino que elegiste */}
           {puntoInicio && puntoDestino && !rutaActiva && rutaPlanificada && (
             <button
+              className="boton-iniciar-recorrido"
               onClick={manejarIniciarDestino}
               style={{
                 position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 700,
@@ -801,7 +802,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
 
           {/* Instrucción: ya tenemos tu ubicación, falta el destino */}
           {puntoInicio && !puntoDestino && !modoClic && (
-            <div style={{
+            <div className="app-flotante-superior" style={{
               position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 500,
               background: 'rgba(14,17,24,0.95)', border: '1px solid var(--border-hover)',
               color: 'var(--text)', borderRadius: 20, padding: '8px 18px',
@@ -814,7 +815,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
 
           {/* Indicador del modo de clic */}
           {modoClic && (
-            <div style={{
+            <div className="app-flotante-superior" style={{
               position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 500,
               background: modoClic === 'inicio' ? 'var(--green)' : 'var(--red)',
               color: modoClic === 'inicio' ? '#000' : '#fff',
@@ -833,7 +834,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
 
       {/* ── Barra de ruta activa ─────────────────────────────────── */}
       {rutaActiva && (
-        <div style={{
+        <div className="barra-ruta" style={{
           background: 'rgba(0,200,150,0.1)',
           borderTop: '1px solid rgba(0,200,150,0.3)',
           padding: '10px 24px',
@@ -851,7 +852,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
               <div style={{ fontSize: 12, color: 'var(--muted)' }}>{rutaActiva.distancia} km · ⏱️ {formatearCronometro(segundos)} <span style={{ opacity: 0.8 }}>(estimado {formatearDuracion(minutosPorDistancia(rutaActiva.distancia, velocidadKmh))})</span></div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="barra-ruta-acciones" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button
               onClick={manejarCancelarRuta}
               style={{
@@ -893,7 +894,7 @@ function AppInterna({ usuario, alCerrarSesion }: { usuario: User | null; alCerra
                 animation: 'pulseGreen 2s infinite',
               }}
             >
-              🏁 Terminé la ruta
+              Finalizar Ruta
             </button>
           </div>
         </div>
