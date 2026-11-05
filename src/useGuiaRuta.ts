@@ -1,33 +1,86 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Coordenada, PasoRuta, RutaCalculada } from './types';
+import { Capacitor } from "@capacitor/core";
+import { TextToSpeech } from "@capacitor-community/text-to-speech";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Coordenada, PasoRuta, RutaCalculada } from "./types";
 import {
   distanciaMetros,
   distanciaAPolilinea,
   formatearDuracionVoz,
   obtenerSector,
-} from './enrutamiento';
+} from "./enrutamiento";
 
 interface Opciones {
   ruta: RutaCalculada | null;
-  posicion: Coordenada | null;   // GPS del usuario
-  activa: boolean;               // true mientras la ruta está en curso y calculada
-  segundos: number;              // cronómetro (lo lleva App)
-  voz: boolean;                  // false = silenciado
-  alDesviarse?: () => void;      // para recalcular la ruta
+  posicion: Coordenada | null; // GPS del usuario
+  activa: boolean; // true mientras la ruta está en curso y calculada
+  segundos: number; // cronómetro (lo lleva App)
+  voz: boolean; // false = silenciado
+  alDesviarse?: () => void; // para recalcular la ruta
   alFinalizar?: (segundos: number) => void;
 }
 
-const UMBRAL_AVISO_LEJOS = 150;   // "En 150 metros, gira..."
-const UMBRAL_AVISO_CERCA = 40;    // "Gira a la derecha"
+const UMBRAL_AVISO_LEJOS = 150; // "En 150 metros, gira..."
+const UMBRAL_AVISO_CERCA = 40; // "Gira a la derecha"
 const UMBRAL_PASO_SUPERADO = 20;
 const UMBRAL_LLEGADA = 25;
-const UMBRAL_DESVIO = 50;         // metros fuera de la ruta
+const UMBRAL_DESVIO = 50; // metros fuera de la ruta
 const LECTURAS_PARA_DESVIO = 3;
-const DISTANCIA_SECTOR = 700;     // cada cuántos metros se consulta el barrio
+const DISTANCIA_SECTOR = 700; // cada cuántos metros se consulta el barrio
 
 /** Devuelve true si realmente habló. */
+let hablando = false;
+let turno = 0;
+
+/** Detiene cualquier voz en curso (nativa o del navegador). */
+export function detenerVoz() {
+  if (Capacitor.isNativePlatform()) {
+    TextToSpeech.stop().catch(() => {});
+    hablando = false;
+    return;
+  }
+  if (typeof window !== "undefined" && "speechSynthesis" in window)
+    window.speechSynthesis.cancel();
+}
+
+/** Devuelve true si realmente habló (o lo intentó). */
 export function hablar(texto: string, sinInterrumpir = false): boolean {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
+  // App instalada: motor de voz nativo de Android/iOS
+  if (Capacitor.isNativePlatform()) {
+    if (sinInterrumpir && hablando) return false;
+    const mio = ++turno;
+    hablando = true;
+    (async () => {
+      try {
+        if (!sinInterrumpir) await TextToSpeech.stop().catch(() => {});
+        await TextToSpeech.speak({
+          text: texto,
+          lang: "es-CO",
+          rate: 1.0,
+          pitch: 1.0,
+          volume: 1.0,
+        });
+      } catch {
+        // Si el idioma es-CO no está instalado, se intenta con español genérico
+        try {
+          await TextToSpeech.speak({
+            text: texto,
+            lang: "es-ES",
+            rate: 1.0,
+            volume: 1.0,
+          });
+        } catch {
+          /* sin voz */
+        }
+      } finally {
+        if (mio === turno) hablando = false;
+      }
+    })();
+    return true;
+  }
+
+  // Navegador web
+  if (typeof window === "undefined" || !("speechSynthesis" in window))
+    return false;
   const s = window.speechSynthesis;
   if (sinInterrumpir) {
     if (s.speaking || s.pending) return false;
@@ -35,19 +88,30 @@ export function hablar(texto: string, sinInterrumpir = false): boolean {
     s.cancel();
   }
   const u = new SpeechSynthesisUtterance(texto);
-  u.lang = 'es-CO';
+  u.lang = "es-CO";
   u.rate = 1;
   s.speak(u);
   return true;
 }
+// Navegador web
 
 const minuscula = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 const redondear10 = (m: number) => Math.max(10, Math.round(m / 10) * 10);
 
-export function useGuiaRuta({ ruta, posicion, activa, segundos, voz, alDesviarse, alFinalizar }: Opciones) {
+export function useGuiaRuta({
+  ruta,
+  posicion,
+  activa,
+  segundos,
+  voz,
+  alDesviarse,
+  alFinalizar,
+}: Opciones) {
   const [indicePaso, setIndicePaso] = useState(1);
   const [distanciaAlPaso, setDistanciaAlPaso] = useState<number | null>(null);
-  const [distanciaRestante, setDistanciaRestante] = useState<number | null>(null);
+  const [distanciaRestante, setDistanciaRestante] = useState<number | null>(
+    null,
+  );
   const [finalizada, setFinalizada] = useState(false);
 
   const anunciosRef = useRef<Set<string>>(new Set());
@@ -72,7 +136,7 @@ export function useGuiaRuta({ ruta, posicion, activa, segundos, voz, alDesviarse
     vozRef.current ? hablar(texto, sinInterrumpir) : false;
 
   const detener = useCallback(() => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+    detenerVoz();
   }, []);
 
   // Termina el recorrido (por llegada o por el botón "Terminé la ruta")
@@ -81,7 +145,12 @@ export function useGuiaRuta({ ruta, posicion, activa, segundos, voz, alDesviarse
     if (!finalizadaRef.current) {
       finalizadaRef.current = true;
       setFinalizada(true);
-      if (vozRef.current) hablar(`Has culminado tu recorrido. Tardaste ${formatearDuracionVoz(total)}.`);
+      if (vozRef.current)
+        hablar(
+          `Has culminado tu recorrido. Tardaste ${formatearDuracionVoz(
+            total,
+          )}.`,
+        );
     }
     alFinalizarRef.current?.(total);
   }, []);
@@ -105,9 +174,11 @@ export function useGuiaRuta({ ruta, posicion, activa, segundos, voz, alDesviarse
     setDistanciaRestante(ruta.distanciaMetros);
 
     const primero = ruta.pasos[0];
-    const km = (ruta.distanciaMetros / 1000).toFixed(1).replace('.', ',');
+    const km = (ruta.distanciaMetros / 1000).toFixed(1).replace(".", ",");
     decir(
-      `${primero?.instruccion ?? 'Inicia tu recorrido'}. Tu destino está a ${km} kilómetros.`
+      `${
+        primero?.instruccion ?? "Inicia tu recorrido"
+      }. Tu destino está a ${km} kilómetros.`,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activa, ruta]);
@@ -140,7 +211,7 @@ export function useGuiaRuta({ ruta, posicion, activa, segundos, voz, alDesviarse
       if (desviosRef.current >= LECTURAS_PARA_DESVIO && pasoTiempo) {
         ultimoRecalculoRef.current = Date.now();
         desviosRef.current = 0;
-        decir('Te has salido de la ruta. Recalculando.');
+        decir("Te has salido de la ruta. Recalculando.");
         alDesviarseRef.current?.();
         return;
       }
@@ -150,8 +221,10 @@ export function useGuiaRuta({ ruta, posicion, activa, segundos, voz, alDesviarse
 
     // 3. ¿Superó alguna de las próximas maniobras?
     for (let j = indicePaso; j < Math.min(indicePaso + 3, pasos.length); j++) {
-      if (pasos[j].tipo === 'arrive') break;
-      if (distanciaMetros(posicion, pasos[j].posicion) <= UMBRAL_PASO_SUPERADO) {
+      if (pasos[j].tipo === "arrive") break;
+      if (
+        distanciaMetros(posicion, pasos[j].posicion) <= UMBRAL_PASO_SUPERADO
+      ) {
         setIndicePaso(j + 1);
         return;
       }
@@ -164,10 +237,10 @@ export function useGuiaRuta({ ruta, posicion, activa, segundos, voz, alDesviarse
       const kCerca = `${indicePaso}-cerca`;
       const kLejos = `${indicePaso}-lejos`;
 
-      if (siguiente.tipo === 'arrive') {
+      if (siguiente.tipo === "arrive") {
         if (d <= UMBRAL_AVISO_LEJOS && !anunciosRef.current.has(kLejos)) {
           anunciosRef.current.add(kLejos);
-          decir('Estás por llegar a tu destino.');
+          decir("Estás por llegar a tu destino.");
         }
       } else if (d <= UMBRAL_AVISO_CERCA && !anunciosRef.current.has(kCerca)) {
         anunciosRef.current.add(kCerca);
@@ -175,38 +248,58 @@ export function useGuiaRuta({ ruta, posicion, activa, segundos, voz, alDesviarse
         decir(siguiente.instruccion);
       } else if (d <= UMBRAL_AVISO_LEJOS && !anunciosRef.current.has(kLejos)) {
         anunciosRef.current.add(kLejos);
-        decir(`En ${redondear10(d)} metros, ${minuscula(siguiente.instruccion)}`);
+        decir(
+          `En ${redondear10(d)} metros, ${minuscula(siguiente.instruccion)}`,
+        );
       }
     }
 
     // 5. Puntos clave del recorrido (sin interrumpir otras instrucciones)
     const total = ruta.distanciaMetros;
-    if (total > 3000 && restante <= total / 2 && !anunciosRef.current.has('mitad')) {
-      if (decir('Vas por la mitad del recorrido.', true)) anunciosRef.current.add('mitad');
+    if (
+      total > 3000 &&
+      restante <= total / 2 &&
+      !anunciosRef.current.has("mitad")
+    ) {
+      if (decir("Vas por la mitad del recorrido.", true))
+        anunciosRef.current.add("mitad");
     }
-    if (total > 2500 && restante <= 1000 && !anunciosRef.current.has('1km')) {
-      if (decir('Te queda aproximadamente un kilómetro.', true)) anunciosRef.current.add('1km');
+    if (total > 2500 && restante <= 1000 && !anunciosRef.current.has("1km")) {
+      if (decir("Te queda aproximadamente un kilómetro.", true))
+        anunciosRef.current.add("1km");
     }
 
     // 6. Sector / barrio por el que vas
     if (!posSectorRef.current) {
       posSectorRef.current = posicion;
-    } else if (!buscandoSectorRef.current && distanciaMetros(posSectorRef.current, posicion) >= DISTANCIA_SECTOR) {
+    } else if (
+      !buscandoSectorRef.current &&
+      distanciaMetros(posSectorRef.current, posicion) >= DISTANCIA_SECTOR
+    ) {
       buscandoSectorRef.current = true;
       posSectorRef.current = posicion;
       obtenerSector(posicion)
-        .then(sector => {
+        .then((sector) => {
           if (sector && sector !== ultimoSectorRef.current) {
             ultimoSectorRef.current = sector;
             decir(`Estás pasando por ${sector}.`, true);
           }
         })
-        .finally(() => { buscandoSectorRef.current = false; });
+        .finally(() => {
+          buscandoSectorRef.current = false;
+        });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [posicion, activa, ruta, indicePaso, finalizar]);
 
   const pasoActual: PasoRuta | null = ruta?.pasos[indicePaso] ?? null;
 
-  return { pasoActual, distanciaAlPaso, distanciaRestante, finalizada, finalizarManual: finalizar, detener };
+  return {
+    pasoActual,
+    distanciaAlPaso,
+    distanciaRestante,
+    finalizada,
+    finalizarManual: finalizar,
+    detener,
+  };
 }
