@@ -128,31 +128,7 @@ body {
 /* Paneles flotantes: nunca se salen de la pantalla */
 .panel-guia { max-width: min(520px, calc(100% - 24px)); }
 .app-flotante-superior { max-width: calc(100% - 24px); }
-  .app-aviso-seguridad {
-    top: auto !important; bottom: 10px !important;
-    left: 10px !important; right: 64px !important;   /* deja libre el botón 📍 */
-    transform: none !important;
-    max-width: none !important;
-    padding: 6px 10px !important; gap: 8px !important;
-  }
-  .app-aviso-seguridad > div:first-child {
-    width: 28px !important; height: 28px !important; font-size: 14px !important;
-  }
-  .app-aviso-seguridad > div:nth-child(2) { min-width: 0; flex: 1 1 auto; }
-  .app-aviso-seguridad > div:nth-child(2) > div:first-child {
-    font-size: 12px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  /* El motivo se limita a 2 líneas */
-  .app-aviso-seguridad > div:nth-child(2) > div:last-child {
-    font-size: 10.5px !important; line-height: 1.3 !important;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  }
-  .app-aviso-seguridad > button { width: 24px !important; height: 24px !important; }
-
-  .boton-iniciar-recorrido {
-    bottom: 78px !important; padding: 10px 20px !important; font-size: 13px !important;
-    max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis;
-  }
+.app-aviso-seguridad { max-width: min(480px, calc(100% - 24px)) !important; }
 .leaflet-popup-content { max-width: 70vw; }
 
 /* Lateral plegable: solo se ve en celular */
@@ -195,7 +171,9 @@ body {
   .avisos-pila > div { white-space: normal !important; }
 
   /* Franjas superiores más delgadas */
-  .banner-publicidad { flex-wrap: nowrap !important; overflow: hidden; }
+  .banner-prueba { padding: 4px 10px !important; font-size: 11px !important; gap: 6px !important; }
+  .banner-marca, .publicidad-texto, .encabezado-subtitulo, .banner-detalle { display: none !important; }
+  .banner-publicidad { padding: 3px 10px !important; font-size: 11px !important; gap: 6px !important; flex-wrap: nowrap !important; overflow: hidden; }
   .banner-publicidad a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 auto; }
   .banner-publicidad button { white-space: nowrap; flex-shrink: 0; padding: 2px 8px !important; font-size: 10.5px !important; }
 
@@ -218,14 +196,26 @@ body {
     width: 44px !important; height: 44px !important;
   }
   .app-aviso-seguridad {
-    top: auto !important; bottom: 10px;
-    left: 10px !important; right: auto !important; transform: none !important;
-    max-width: calc(100% - 72px) !important;
+    top: auto !important; bottom: 10px !important;
+    left: 10px !important; right: 64px !important;
+    transform: none !important;
+    max-width: none !important;
     padding: 6px 10px !important; gap: 8px !important;
   }
-  .app-aviso-seguridad > div:last-child > div:last-child { font-size: 10.5px !important; }
+  .app-aviso-seguridad > div:first-child {
+    width: 28px !important; height: 28px !important; font-size: 14px !important;
+  }
+  .app-aviso-seguridad > div:nth-child(2) { min-width: 0; flex: 1 1 auto; }
+  .app-aviso-seguridad > div:nth-child(2) > div:first-child {
+    font-size: 12px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .app-aviso-seguridad > div:nth-child(2) > div:last-child {
+    font-size: 10.5px !important; line-height: 1.3 !important;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .app-aviso-seguridad > button { width: 24px !important; height: 24px !important; }
   .boton-iniciar-recorrido {
-    bottom: 84px !important; padding: 10px 20px !important; font-size: 13px !important;
+    bottom: 78px !important; padding: 10px 20px !important; font-size: 13px !important;
     max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis;
   }
 
@@ -304,3 +294,30 @@ body {
 .pin-cuadro-interno { width: 7px; height: 7px; background: #fff; border-radius: 1px; }
 .pin-etiqueta-destino { background: #ff4757; }
 .pin-etiqueta-destino::after { background: #ff4757; }
+
+/* ── Avatar ciclista ─────────────────────────────────────────── */
+.avatar-mov { transition: transform 0.9s linear; cursor: pointer; background: none; border: none; }
+.leaflet-zoom-anim .avatar-mov { transition: transform 0.25s cubic-bezier(0,0,0.25,1); }
+.avatar-contenedor { display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 0 2px #fff) drop-shadow(0 3px 5px rgba(0,0,0,0.45)); }
+.avatar-contenedor .pin-etiqueta { margin-bottom: 6px; font-size: 10.5px; padding: 4px 8px; }
+.avatar-svg { display: block; overflow: visible; }
+.avatar-izq { transform: scaleX(-1); }
+
+.avatar-saludo { transform-origin: 12px 21px; animation: saludar 1.1s ease-in-out infinite; }
+@keyframes saludar { 0%,100% { transform: rotate(-12deg); } 50% { transform: rotate(18deg); } }
+
+.avatar-sube { animation: subirBici 0.55s ease-out both; }
+@keyframes subirBici {
+  0%   { transform: translateX(-18px) translateY(4px) scale(0.85); opacity: 0.4; }
+  60%  { transform: translateX(2px) translateY(-8px) scale(1.08); opacity: 1; }
+  100% { transform: none; }
+}
+
+.avatar-pierna { transform-origin: 26px 18px; animation: pedalear 0.7s ease-in-out infinite; }
+@keyframes pedalear { 0%,100% { transform: rotate(-14deg); } 50% { transform: rotate(14deg); } }
+.avatar-ruedas { transform-box: fill-box; }
+.avatar-sube .avatar-ruedas { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-saludo, .avatar-pierna, .avatar-sube { animation: none !important; }
+}
