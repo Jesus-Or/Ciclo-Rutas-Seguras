@@ -1042,6 +1042,10 @@ function AppInterna({
         {/* ── Mapa ──────────────────────────────────────────── */}
         <main className="app-mapa" style={{ flex: 1, position: "relative" }}>
           <MapaCiclista
+          alTocarAvatar={() => {
+              if (puntoDestino && rutaPlanificada) manejarIniciarDestino();
+              else mostrarAviso('Elige un destino y toca de nuevo al ciclista para subirte a la bici 🚲', 'info');
+            }}
             rutas={rutasFiltradas}
             rutaSeleccionada={rutaSeleccionada}
             marcadores={marcadoresMapa}

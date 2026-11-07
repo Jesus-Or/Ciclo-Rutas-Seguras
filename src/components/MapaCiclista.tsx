@@ -69,8 +69,8 @@ function iconoAvatarRodando(izquierda: boolean) {
   return L.divIcon({
     className: 'avatar-mov',
     html: `<div class="avatar-contenedor avatar-sube">
-      <svg class="avatar-svg ${izquierda ? 'avatar-izq' : ''}" width="72" height="56" viewBox="0 0 64 48">
-        ${SVG_BICI}
+      <svg class="avatar-svg ${izquierda ? 'avatar-izq' : ''}" width="50" height="38" viewBox="0 0 64 48">
+        <g transform="translate(6,6) scale(0.8)">${SVG_BICI}</g>
         <g stroke-linecap="round" stroke-linejoin="round">
           <circle cx="31" cy="6" r="5" fill="#ffd7a8"/>
           <path d="M26 5 Q31 -3 36 5 Z" fill="#00c896"/>
@@ -80,8 +80,8 @@ function iconoAvatarRodando(izquierda: boolean) {
         </g>
       </svg>
     </div>`,
-    iconSize: [72, 56],
-    iconAnchor: [36, 46],
+    iconSize: [50, 38],
+    iconAnchor: [25, 32],
   });
 }
 
