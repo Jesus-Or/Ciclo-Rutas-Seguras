@@ -1,9 +1,13 @@
 // ── Ubicación del usuario ─────────────────────────────────────
-// En la app instalada usa el GPS del dispositivo (pide permiso la primera vez);
-// en la web usa la geolocalización del navegador.
-import { Capacitor } from '@capacitor/core';
+// App instalada: GPS nativo; con un recorrido en curso usa un servicio en segundo plano
+// (notificación fija) para seguir la ruta con la pantalla apagada.
+// Web: geolocalización del navegador.
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
+import type { BackgroundGeolocationPlugin } from '@capacitor-community/background-geolocation';
 import { Coordenada } from './types';
+
+const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>('BackgroundGeolocation');
 
 async function pedirPermisoSiHaceFalta(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
@@ -23,13 +27,32 @@ export async function obtenerUbicacionActual(): Promise<Coordenada> {
   return { latitud: posicion.coords.latitude, longitud: posicion.coords.longitude };
 }
 
-// Seguimiento continuo: avisa cada vez que el usuario se mueve (por ejemplo, manejando).
+// Seguimiento continuo. Con segundoPlano=true (recorrido en curso) sigue funcionando con la pantalla apagada.
 // Devuelve una función para detener el seguimiento.
 export async function observarUbicacion(
   alCambiar: (coordenada: Coordenada, precisionMetros: number) => void,
   alFallar?: (error: unknown) => void,
+  segundoPlano = false,
 ): Promise<() => void> {
   await pedirPermisoSiHaceFalta();
+
+  if (segundoPlano && Capacitor.isNativePlatform()) {
+    const id = await BackgroundGeolocation.addWatcher(
+      {
+        backgroundTitle: 'Ciclo Rutas Seguras',
+        backgroundMessage: 'Siguiendo tu recorrido…',
+        requestPermissions: true,
+        stale: false,
+        distanceFilter: 5,
+      },
+      (posicion, error) => {
+        if (error || !posicion) { alFallar?.(error); return; }
+        alCambiar({ latitud: posicion.latitude, longitud: posicion.longitude }, posicion.accuracy);
+      },
+    );
+    return () => { void BackgroundGeolocation.removeWatcher({ id }); };
+  }
+
   const id = await Geolocation.watchPosition(
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 },
     (posicion, error) => {

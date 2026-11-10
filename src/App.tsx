@@ -30,6 +30,7 @@ import {
   RutaCalculada,
 } from "./types";
 import { obtenerUbicacionActual, observarUbicacion } from "./ubicacion";
+import { borrarRecorrido, guardarRecorrido, leerRecorrido } from "./persistencia";
 import {
   estimarTiempoRecorrido,
   minutosPorDistancia,
@@ -222,10 +223,24 @@ function AppInterna({
     setAvisoCerrado(false);
   }, [puntoDestino]);
 
+  // El cronómetro se calcula con la hora de inicio (no sumando timers): sigue exacto aunque
+  // el celular se apague la pantalla o el sistema pause la app.
+  const inicioMs = useRef<number | null>(null);
   useEffect(() => {
-    if (!rutaActiva || finalizarAbierto) return;
-    const intervalo = setInterval(() => setSegundos((s) => s + 1), 1000);
-    return () => clearInterval(intervalo);
+    if (!rutaActiva) { inicioMs.current = null; return; }
+    if (finalizarAbierto) return;
+    if (inicioMs.current === null) inicioMs.current = Date.now() - segundos * 1000;
+    const actualizar = () => {
+      if (inicioMs.current !== null) setSegundos(Math.max(0, Math.floor((Date.now() - inicioMs.current) / 1000)));
+    };
+    actualizar();
+    const intervalo = setInterval(actualizar, 1000);
+    document.addEventListener("visibilitychange", actualizar);
+    return () => {
+      clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", actualizar);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rutaActiva, finalizarAbierto]);
 
   const ultimaPosicion = useRef<Coordenada | null>(null);
@@ -233,6 +248,38 @@ function AppInterna({
   // ── Ruta real por las calles + guía por voz ─────────────────────────────
   const [posicionGps, setPosicionGps] = useState<Coordenada | null>(null); // GPS real (aunque el inicio sea manual)
   const [vozActiva, setVozActiva] = useState(true);
+
+  // Retoma el recorrido si el sistema cerró la app mientras estaba en curso
+  const [recorridoRestaurado, setRecorridoRestaurado] = useState(false);
+  useEffect(() => {
+    let cancelado = false;
+    leerRecorrido().then((guardado) => {
+      if (cancelado) return;
+      if (guardado) {
+        inicioMs.current = guardado.inicioMs;
+        setSegundos(Math.max(0, Math.floor((Date.now() - guardado.inicioMs) / 1000)));
+        setVozActiva(guardado.voz);
+        setPuntoDestino(guardado.destino);
+        setRutaActiva(guardado.ruta);
+        setRutaSeleccionada(guardado.ruta);
+        mostrarAviso("▶️ Retomamos tu recorrido en curso", "info");
+      }
+      setRecorridoRestaurado(true);
+    });
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Guarda el recorrido mientras está en curso; lo borra al terminar
+  useEffect(() => {
+    if (!recorridoRestaurado) return;
+    if (rutaActiva && inicioMs.current !== null) {
+      void guardarRecorrido({ ruta: rutaActiva, destino: puntoDestino, inicioMs: inicioMs.current, voz: vozActiva });
+    } else if (!rutaActiva) {
+      void borrarRecorrido();
+    }
+  }, [recorridoRestaurado, rutaActiva, puntoDestino, vozActiva]);
+
   const [rutaPlanificada, setRutaPlanificada] = useState<RutaCalculada | null>(
     null,
   );
@@ -384,6 +431,7 @@ function AppInterna({
   // Seguimiento de tu ubicación mientras te mueves (por ejemplo, manejando).
   // Si marcaste el inicio a mano en el mapa, no se sobrescribe; "Actualizar mi ubicación" vuelve al GPS.
   const falloGps = useRef(false);
+  const enRecorrido = Boolean(rutaActiva); // con recorrido en curso el GPS sigue en segundo plano
   useEffect(() => {
     let cancelado = false;
     let detener: (() => void) | undefined;
@@ -411,7 +459,7 @@ function AppInterna({
               tipo: "inicio",
             },
       );
-    }, avisarFalloUnaVez)
+    }, avisarFalloUnaVez, enRecorrido)
       .then((funcionDetener) => {
         if (cancelado) funcionDetener();
         else detener = funcionDetener;
@@ -422,7 +470,7 @@ function AppInterna({
       detener?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [enRecorrido]);
 
   const manejarClicMapa = (latitud: number, longitud: number) => {
     if (modoClic === "inicio") {
@@ -462,6 +510,7 @@ function AppInterna({
       /* sin voz */
     }
     setSegundos(0);
+    inicioMs.current = Date.now();
     // La ruta parte siempre desde tu ubicación real, aunque hayas marcado otro inicio a mano
     if (ultimaPosicion.current) {
       setPuntoInicio({
@@ -507,6 +556,7 @@ function AppInterna({
       resenas: [],
     };
     setSegundos(0);
+    inicioMs.current = Date.now();
     if (ultimaPosicion.current) {
       setPuntoInicio({
         posicion: ultimaPosicion.current,

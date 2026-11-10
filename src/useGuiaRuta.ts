@@ -58,6 +58,7 @@ export function hablar(texto: string, sinInterrumpir = false): boolean {
           rate: 1.0,
           pitch: 1.0,
           volume: 1.0,
+          category: "playback", // iOS: sigue sonando en segundo plano y por audífonos
         });
       } catch {
         // Si el idioma es-CO no está instalado, se intenta con español genérico

@@ -11,3 +11,4 @@ export const supabaseConfigurado = true;
 
 // 4. Creamos e exportamos el cliente inicializado listo para operar
 export const supabase = createClient(url, llaveAnonima);
+
